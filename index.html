@@ -5,18 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#070809" />
   <meta name="description" content="Product VIS — drop a GLB and create a premium realtime product render directly in the browser." />
+  <meta name="product-vis-build" content="v1.1-foundation" />
   <title>Product VIS — Realtime Product Renderer</title>
-  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/src/styles.css" />
 
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"
-      }
-    }
-  </script>
+
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -389,6 +383,6 @@
   </dialog>
 
   <noscript>This app requires JavaScript to render 3D models.</noscript>
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>
