@@ -6,9 +6,10 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { QUALITY_PROFILES } from '../config/presets.js';
 
 export class RendererEngine {
-  constructor(canvas, { onContextLost } = {}) {
+  constructor(canvas, { onContextLost, onContextRestored } = {}) {
     this.canvas = canvas;
     this.onContextLost = onContextLost;
+    this.onContextRestored = onContextRestored;
     this.scene = null;
     this.camera = null;
     this.renderer = null;
@@ -18,6 +19,7 @@ export class RendererEngine {
     this.clock = null;
     this.postEnabled = true;
     this.quality = 'quality';
+    this.contextLost = false;
   }
 
   initialize() {
@@ -26,17 +28,22 @@ export class RendererEngine {
       antialias: true,
       alpha: false,
       powerPreference: 'high-performance',
-      preserveDrawingBuffer: true,
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.toneMappingExposure = 0.98;
+    this.renderer.shadowMap.enabled = false;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
+      this.contextLost = true;
       this.onContextLost?.(event);
+    });
+    this.canvas.addEventListener('webglcontextrestored', (event) => {
+      this.contextLost = false;
+      this.resetClock();
+      this.onContextRestored?.(event);
     });
 
     this.scene = new THREE.Scene();
@@ -46,9 +53,9 @@ export class RendererEngine {
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.18, 0.56, 0.82);
-    this.bloomPass.threshold = 0.84;
-    this.bloomPass.radius = 0.6;
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0, 0.42, 0.92);
+    this.bloomPass.threshold = 0.92;
+    this.bloomPass.radius = 0.42;
     this.composer.addPass(this.bloomPass);
     this.outputPass = new OutputPass();
     this.composer.addPass(this.outputPass);
@@ -65,12 +72,50 @@ export class RendererEngine {
     return Math.min(this.clock.getDelta(), 0.05);
   }
 
+  resetClock() {
+    if (!this.clock) return;
+    this.clock.stop();
+    this.clock.start();
+  }
+
+  getCapabilities() {
+    const renderer = this.renderer;
+    if (!renderer) return null;
+    const gl = renderer.getContext();
+    let debug = null;
+    try {
+      const extension = gl.getExtension('WEBGL_debug_renderer_info');
+      if (extension) {
+        debug = {
+          vendor: String(gl.getParameter(extension.UNMASKED_VENDOR_WEBGL) || 'unknown'),
+          renderer: String(gl.getParameter(extension.UNMASKED_RENDERER_WEBGL) || 'unknown'),
+        };
+      }
+    } catch {
+      debug = null;
+    }
+    return {
+      isWebGL2: Boolean(renderer.capabilities.isWebGL2),
+      maxTextureSize: renderer.capabilities.maxTextureSize,
+      maxCubemapSize: renderer.capabilities.maxCubemapSize,
+      maxSamples: renderer.capabilities.maxSamples,
+      maxTextures: renderer.capabilities.maxTextures,
+      maxVertexTextures: renderer.capabilities.maxVertexTextures,
+      precision: renderer.capabilities.precision,
+      maxAnisotropy: renderer.capabilities.getMaxAnisotropy(),
+      currentPixelRatio: renderer.getPixelRatio(),
+      quality: this.quality,
+      contextLost: this.contextLost,
+      debug,
+    };
+  }
+
   setExposure(value) {
-    this.renderer.toneMappingExposure = value;
+    this.renderer.toneMappingExposure = THREE.MathUtils.clamp(Number(value) || 0, 0.1, 4);
   }
 
   setBloomStrength(value) {
-    this.bloomPass.strength = value;
+    this.bloomPass.strength = THREE.MathUtils.clamp(Number(value) || 0, 0, 2);
   }
 
   setPostEnabled(enabled) {
@@ -102,8 +147,76 @@ export class RendererEngine {
   }
 
   render() {
-    if (this.postEnabled) this.composer.render();
+    const needsPost = this.postEnabled && this.bloomPass.strength > 0.0001;
+    if (needsPost) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
+  }
+
+  async renderOffscreen(width, height, { camera = this.camera } = {}) {
+    const safeWidth = Math.max(1, Math.round(Number(width) || 1));
+    const safeHeight = Math.max(1, Math.round(Number(height) || 1));
+    const maxTextureSize = this.renderer.capabilities.maxTextureSize || 4096;
+    if (safeWidth > maxTextureSize || safeHeight > maxTextureSize) {
+      throw new Error(`Export exceeds this GPU's ${maxTextureSize}px texture limit.`);
+    }
+
+    const renderer = this.renderer;
+    const previousTarget = renderer.getRenderTarget();
+    const previousViewport = renderer.getViewport(new THREE.Vector4());
+    const previousScissor = renderer.getScissor(new THREE.Vector4());
+    const previousScissorTest = renderer.getScissorTest();
+    const previousXrEnabled = renderer.xr.enabled;
+    const renderTarget = new THREE.WebGLRenderTarget(safeWidth, safeHeight, {
+      format: THREE.RGBAFormat,
+      type: THREE.UnsignedByteType,
+      depthBuffer: true,
+      stencilBuffer: false,
+    });
+    renderTarget.texture.colorSpace = THREE.SRGBColorSpace;
+    renderTarget.texture.generateMipmaps = false;
+
+    let readTarget = renderTarget;
+    let exportComposer = null;
+    try {
+      renderer.xr.enabled = false;
+      renderer.setScissorTest(false);
+      renderer.setViewport(0, 0, safeWidth, safeHeight);
+      renderer.setRenderTarget(renderTarget);
+      renderer.clear(true, true, true);
+
+      const needsPost = this.postEnabled && this.bloomPass.strength > 0.0001;
+      if (needsPost) {
+        exportComposer = new EffectComposer(renderer, renderTarget);
+        exportComposer.renderToScreen = false;
+        exportComposer.setPixelRatio(1);
+        exportComposer.setSize(safeWidth, safeHeight);
+        exportComposer.addPass(new RenderPass(this.scene, camera));
+        const bloom = new UnrealBloomPass(
+          new THREE.Vector2(safeWidth, safeHeight),
+          this.bloomPass.strength,
+          this.bloomPass.radius,
+          this.bloomPass.threshold,
+        );
+        exportComposer.addPass(bloom);
+        exportComposer.addPass(new OutputPass());
+        exportComposer.render();
+        readTarget = exportComposer.readBuffer;
+      } else {
+        renderer.render(this.scene, camera);
+      }
+
+      const pixels = new Uint8Array(safeWidth * safeHeight * 4);
+      renderer.readRenderTargetPixels(readTarget, 0, 0, safeWidth, safeHeight, pixels);
+      return { width: safeWidth, height: safeHeight, pixels };
+    } finally {
+      exportComposer?.dispose();
+      renderTarget.dispose();
+      renderer.setRenderTarget(previousTarget);
+      renderer.setViewport(previousViewport);
+      renderer.setScissor(previousScissor);
+      renderer.setScissorTest(previousScissorTest);
+      renderer.xr.enabled = previousXrEnabled;
+    }
   }
 
   getViewportExportSize(width, height) {

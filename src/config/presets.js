@@ -1,112 +1,119 @@
-export const LOOK_PRESETS = Object.freeze({
-  studio: Object.freeze({
-    top: '#20242a',
-    bottom: '#060708',
-    accent: '#ff7950',
-    accentStrength: 0.13,
-    floor: '#111316',
-    floorRoughness: 0.7,
-    exposure: 1.05,
-    environment: 1.25,
-    key: 3.4,
-    fill: 1.05,
-    rim: 5.0,
-    keyColor: '#fff7ee',
-    fillColor: '#b7c8dd',
-    rimColor: '#ff7950',
-    bloom: 0.18,
-    shadow: 0.48,
-  }),
-  soft: Object.freeze({
-    top: '#e9e8e3',
-    bottom: '#999b9c',
-    accent: '#ffffff',
-    accentStrength: 0.1,
-    floor: '#c6c6c2',
-    floorRoughness: 0.82,
-    exposure: 0.94,
-    environment: 1.15,
-    key: 2.45,
-    fill: 1.7,
-    rim: 1.65,
-    keyColor: '#fffaf3',
-    fillColor: '#dce7f0',
-    rimColor: '#ffffff',
-    bloom: 0.05,
-    shadow: 0.27,
-  }),
-  noir: Object.freeze({
-    top: '#0b0b0c',
-    bottom: '#010101',
-    accent: '#e54820',
-    accentStrength: 0.08,
-    floor: '#050506',
-    floorRoughness: 0.48,
-    exposure: 0.92,
-    environment: 0.52,
-    key: 1.25,
-    fill: 0.12,
-    rim: 7.2,
-    keyColor: '#d8e2ef',
-    fillColor: '#5f7188',
-    rimColor: '#ff5c31',
-    bloom: 0.36,
-    shadow: 0.62,
-  }),
-  gallery: Object.freeze({
-    top: '#29364e',
-    bottom: '#080b12',
-    accent: '#7aa2ff',
-    accentStrength: 0.12,
-    floor: '#151a24',
-    floorRoughness: 0.58,
-    exposure: 1.08,
-    environment: 1.6,
-    key: 2.85,
-    fill: 1.15,
-    rim: 2.9,
-    keyColor: '#eef4ff',
-    fillColor: '#7da6ff',
-    rimColor: '#b5caff',
-    bloom: 0.13,
+import { DEFAULT_EXPERIENCE_STATE } from '../presentation/ExperienceGrammar.js';
+
+const NEUTRAL_STUDIO = Object.freeze({
+  exposure: 0.98,
+  environment: 1.18,
+  environmentRotation: Math.PI * 0.08,
+  key: 2.35,
+  fill: 0.78,
+  rim: 1.8,
+  bloom: 0,
+  shadow: 0.52,
+  shadowSoftness: 0.58,
+});
+
+function createBackdropPreset(label, backdropTone) {
+  return Object.freeze({
+    label,
+    backdropTone,
+    ...NEUTRAL_STUDIO,
+  });
+}
+
+function createLightingPreset(label, values) {
+  return Object.freeze({ label, ...values });
+}
+
+/**
+ * Visible backdrop and lighting remain independent. The simple dock exposes
+ * White / Gray / Black while Advanced keeps the continuous neutral range.
+ */
+export const BACKDROP_PRESETS = Object.freeze({
+  white: createBackdropPreset('White', 0.965),
+  light: createBackdropPreset('Light', 0.82),
+  gray: createBackdropPreset('Gray', 0.48),
+  dark: createBackdropPreset('Dark', 0.16),
+  black: createBackdropPreset('Black', 0.025),
+});
+
+// Stable public export for earlier checkpoints and integrations.
+export const LOOK_PRESETS = BACKDROP_PRESETS;
+
+export const LIGHT_PRESETS = Object.freeze({
+  soft: createLightingPreset('Soft', {
+    exposure: 1.03,
+    environment: 1.46,
+    environmentRotation: Math.PI * 0.11,
+    key: 1.55,
+    fill: 1.16,
+    rim: 1.08,
+    bloom: 0,
     shadow: 0.42,
+    shadowSoftness: 0.74,
   }),
-  sunset: Object.freeze({
-    top: '#5a2720',
-    bottom: '#120708',
-    accent: '#ff9b6b',
-    accentStrength: 0.21,
-    floor: '#1c0d0b',
-    floorRoughness: 0.63,
-    exposure: 0.98,
-    environment: 0.72,
-    key: 3.7,
-    fill: 0.58,
-    rim: 5.6,
-    keyColor: '#ffd2a2',
-    fillColor: '#7d4952',
-    rimColor: '#ff7950',
-    bloom: 0.25,
-    shadow: 0.51,
+  balanced: createLightingPreset('Balanced', NEUTRAL_STUDIO),
+  contrast: createLightingPreset('Contrast', {
+    exposure: 0.94,
+    environment: 0.84,
+    environmentRotation: Math.PI * 0.06,
+    key: 3.2,
+    fill: 0.36,
+    rim: 2.55,
+    bloom: 0,
+    shadow: 0.62,
+    shadowSoftness: 0.44,
   }),
 });
 
+export const DEFAULT_BACKDROP_ID = 'gray';
+export const DEFAULT_LOOK_ID = DEFAULT_BACKDROP_ID;
+export const DEFAULT_LIGHT_ID = 'balanced';
+export const DEFAULT_GROUND_OFFSET = 0;
+export const DEFAULT_CAMERA_TARGET = Object.freeze({ x: 0, y: 0.47, z: 0 });
+
 export const CAMERA_PRESETS = Object.freeze({
-  hero: Object.freeze({ direction: [1.1, 0.48, 1.65], distance: 1.02, targetY: 0.47 }),
-  front: Object.freeze({ direction: [0, 0.18, 1], distance: 1.02, targetY: 0.48 }),
-  side: Object.freeze({ direction: [1, 0.2, 0], distance: 1.05, targetY: 0.48 }),
-  top: Object.freeze({ direction: [0.32, 1, 0.34], distance: 1.08, targetY: 0.42 }),
-  detail: Object.freeze({ direction: [0.9, 0.34, 1.25], distance: 0.58, targetY: 0.65 }),
+  hero: Object.freeze({ direction: [1.12, 0.45, 1.65], distance: 0.9, target: DEFAULT_CAMERA_TARGET }),
+  front: Object.freeze({ direction: [0, 0.18, 1], distance: 0.94, target: Object.freeze({ x: 0, y: 0.48, z: 0 }) }),
+  side: Object.freeze({ direction: [1, 0.2, 0], distance: 0.96, target: Object.freeze({ x: 0, y: 0.48, z: 0 }) }),
+  top: Object.freeze({ direction: [0.32, 1, 0.34], distance: 1.02, target: Object.freeze({ x: 0, y: 0.42, z: 0 }) }),
+  detail: Object.freeze({ direction: [0.9, 0.34, 1.25], distance: 0.62, target: Object.freeze({ x: 0, y: 0.65, z: 0 }) }),
 });
 
 export const QUALITY_PROFILES = Object.freeze({
-  performance: Object.freeze({ maxPixelRatio: 1, shadowMapSize: 1024 }),
-  balanced: Object.freeze({ maxPixelRatio: 1.45, shadowMapSize: 1536 }),
-  quality: Object.freeze({ maxPixelRatio: 2, shadowMapSize: 2048 }),
+  performance: Object.freeze({
+    maxPixelRatio: 1,
+    shadowMapSize: 1024,
+    contactShadowSize: 256,
+    contactShadowBlurPasses: 1,
+    contactShadowDynamicFps: 16,
+  }),
+  balanced: Object.freeze({
+    maxPixelRatio: 1.45,
+    shadowMapSize: 1536,
+    contactShadowSize: 512,
+    contactShadowBlurPasses: 1,
+    contactShadowDynamicFps: 24,
+  }),
+  quality: Object.freeze({
+    maxPixelRatio: 2,
+    shadowMapSize: 2048,
+    contactShadowSize: 768,
+    contactShadowBlurPasses: 2,
+    contactShadowDynamicFps: 30,
+  }),
 });
 
+const defaultBackdrop = BACKDROP_PRESETS[DEFAULT_BACKDROP_ID];
+const defaultLighting = LIGHT_PRESETS[DEFAULT_LIGHT_ID];
+
 export const DEFAULT_PROJECT_STATE = Object.freeze({
-  schemaVersion: 1,
+  schemaVersion: 10,
+  meta: Object.freeze({
+    id: null,
+    title: 'Demo Object',
+    createdAt: null,
+    updatedAt: null,
+  }),
   model: Object.freeze({
     name: 'Demo Object',
     fileSize: null,
@@ -114,14 +121,27 @@ export const DEFAULT_PROJECT_STATE = Object.freeze({
     materialMode: 'original',
     userScale: 1,
     userOffset: 0,
+    rotation: Object.freeze({ x: 0, y: 0, z: 0 }),
+    positionXZ: Object.freeze({ x: 0, z: 0 }),
+    backfaceRepairEnabled: false,
+    materialSideOverrides: Object.freeze({}),
   }),
   studio: Object.freeze({
-    preset: 'studio',
-    exposure: LOOK_PRESETS.studio.exposure,
-    environment: LOOK_PRESETS.studio.environment,
-    key: LOOK_PRESETS.studio.key,
-    rim: LOOK_PRESETS.studio.rim,
-    bloom: LOOK_PRESETS.studio.bloom,
+    // `preset` remains a legacy alias for the active backdrop preset.
+    preset: DEFAULT_BACKDROP_ID,
+    backdropPreset: DEFAULT_BACKDROP_ID,
+    lightingPreset: DEFAULT_LIGHT_ID,
+    backdropTone: defaultBackdrop.backdropTone,
+    exposure: defaultLighting.exposure,
+    environment: defaultLighting.environment,
+    environmentRotation: defaultLighting.environmentRotation,
+    key: defaultLighting.key,
+    fill: defaultLighting.fill,
+    rim: defaultLighting.rim,
+    bloom: defaultLighting.bloom,
+    groundOffset: DEFAULT_GROUND_OFFSET,
+    shadow: defaultLighting.shadow,
+    shadowSoftness: defaultLighting.shadowSoftness,
     floorEnabled: true,
     shadowsEnabled: true,
     postEnabled: true,
@@ -129,19 +149,57 @@ export const DEFAULT_PROJECT_STATE = Object.freeze({
   camera: Object.freeze({
     preset: 'hero',
     focalLength: 50,
+    target: DEFAULT_CAMERA_TARGET,
+    pose: null,
     damping: 0.08,
     autoRotate: false,
     horizonLocked: true,
+    mode: 'presentation',
   }),
   motion: Object.freeze({
     clipIndex: 0,
     playing: false,
     loop: true,
     speed: 1,
+    time: 0,
     turntable: false,
     turntableSpeed: 0.3,
+    turntableAngle: 0,
+  }),
+  configurator: Object.freeze({
+    partVisibility: Object.freeze({}),
+    states: Object.freeze([]),
+    activeStateId: null,
+    anchors: Object.freeze([]),
+    anchorDisplay: 'off',
+    selectedAnchorId: null,
+    variantGroups: Object.freeze([]),
+    variantSelections: Object.freeze({}),
+    configurations: Object.freeze([]),
+    activeConfigurationId: null,
+    variantPreviewEnabled: false,
+    infographics: Object.freeze([]),
+    infographicDisplay: 'off',
+    selectedInfographicId: null,
+    presentations: Object.freeze([]),
+    activePresentationId: null,
+    explodeOffsets: Object.freeze({}),
+    explodeStates: Object.freeze([]),
+    activeExplodeStateId: null,
+    animationChapters: Object.freeze([]),
+    stories: Object.freeze([]),
+    activeStoryId: null,
+    activeStoryStepId: null,
+    storyPreviewEnabled: false,
   }),
   render: Object.freeze({
     quality: 'quality',
+    exportFraming: 'match-viewport',
+  }),
+  experience: DEFAULT_EXPERIENCE_STATE,
+  runtime: Object.freeze({
+    autoQuality: true,
+    pauseWhenHidden: true,
+    recoveryEnabled: true,
   }),
 });

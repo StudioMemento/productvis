@@ -1,195 +1,186 @@
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { easeInOutCubic } from '../utils/math.js';
+import { EnvironmentManager } from './EnvironmentManager.js';
+import { BackdropManager } from './BackdropManager.js';
+import { LightRig } from './LightRig.js';
+import { GroundSystem } from './GroundSystem.js';
 
+/**
+ * Studio orchestration.
+ *
+ * Environment / IBL  -> material reflections and ambient illumination
+ * Backdrop            -> visible white-to-black field
+ * Ground              -> Y=0 contract and geometry-aware contact shadow
+ * Light rig           -> restrained neutral edge definition
+ *
+ * V1.4 keeps backdrop and lighting presets as independent tween channels so a
+ * simple background choice can never overwrite the selected light character.
+ */
 export class StudioSystem {
   constructor(engine) {
     this.engine = engine;
     this.scene = engine.scene;
     this.renderer = engine.renderer;
+
+    this.environment = null;
+    this.backdrop = null;
+    this.lightRig = null;
+    this.ground = null;
     this.environmentTexture = null;
-    this.pmremGenerator = null;
-    this.backgroundMaterial = null;
-    this.backgroundSphere = null;
-    this.floorMesh = null;
-    this.contactShadow = null;
-    this.hemiLight = null;
-    this.keyLight = null;
-    this.fillLight = null;
-    this.rimLight = null;
-    this.lookTween = null;
+    this.backdropTween = null;
+    this.lightingTween = null;
     this.floorEnabled = true;
     this.shadowsEnabled = true;
   }
 
   initialize() {
-    this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
-    this.pmremGenerator.compileEquirectangularShader();
-    const room = new RoomEnvironment();
-    this.environmentTexture = this.pmremGenerator.fromScene(room, 0.04).texture;
-    room.dispose();
-    this.scene.environment = this.environmentTexture;
-    this.scene.environmentIntensity = 1.25;
+    this.environment = new EnvironmentManager(this.renderer, this.scene).initialize();
+    this.environmentTexture = this.environment.texture;
+    this.backdrop = new BackdropManager(this.scene).initialize(0.48);
+    this.lightRig = new LightRig(this.scene).initialize();
+    this.ground = new GroundSystem(this.renderer, this.scene).initialize();
 
-    this.backgroundMaterial = new THREE.ShaderMaterial({
-      name: 'PV Background Gradient',
-      side: THREE.BackSide,
-      depthWrite: false,
-      fog: false,
-      uniforms: {
-        topColor: { value: new THREE.Color('#20242a') },
-        bottomColor: { value: new THREE.Color('#060708') },
-        accentColor: { value: new THREE.Color('#ff7950') },
-        accentStrength: { value: 0.13 },
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vWorldDirection;
-        void main() {
-          vUv = uv;
-          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-          vWorldDirection = worldPosition.xyz - cameraPosition;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        varying vec2 vUv;
-        varying vec3 vWorldDirection;
-        uniform vec3 topColor;
-        uniform vec3 bottomColor;
-        uniform vec3 accentColor;
-        uniform float accentStrength;
-        void main() {
-          vec3 dir = normalize(vWorldDirection);
-          float h = clamp(dir.y * 0.52 + 0.48, 0.0, 1.0);
-          float blend = smoothstep(0.0, 1.0, pow(h, 0.72));
-          vec3 color = mix(bottomColor, topColor, blend);
-          vec2 p = vec2(dir.x * 0.74, dir.y - 0.03);
-          float glow = smoothstep(0.72, 0.0, length(p));
-          color += accentColor * glow * accentStrength;
-          gl_FragColor = vec4(color, 1.0);
-        }
-      `,
-    });
-    this.backgroundSphere = new THREE.Mesh(new THREE.SphereGeometry(85, 48, 32), this.backgroundMaterial);
-    this.backgroundSphere.renderOrder = -1000;
-    this.backgroundSphere.frustumCulled = false;
-    this.scene.add(this.backgroundSphere);
-
-    this.floorMesh = this.#createCyclorama();
-    this.scene.add(this.floorMesh);
-
-    this.contactShadow = this.#createContactShadow();
-    this.scene.add(this.contactShadow);
-
-    this.hemiLight = new THREE.HemisphereLight(0xdce7f5, 0x0c0d10, 0.42);
-    this.scene.add(this.hemiLight);
-
-    this.keyLight = new THREE.DirectionalLight(0xfff7ee, 3.4);
-    this.keyLight.position.set(4.8, 7.5, 5.7);
-    this.keyLight.castShadow = true;
-    this.keyLight.shadow.mapSize.set(2048, 2048);
-    this.keyLight.shadow.bias = -0.00018;
-    this.keyLight.shadow.normalBias = 0.025;
-    this.keyLight.shadow.radius = 4;
-    this.scene.add(this.keyLight);
-    this.scene.add(this.keyLight.target);
-
-    this.fillLight = new THREE.DirectionalLight(0xb7c8dd, 1.05);
-    this.fillLight.position.set(-5.6, 3.5, 4.5);
-    this.scene.add(this.fillLight);
-    this.scene.add(this.fillLight.target);
-
-    this.rimLight = new THREE.DirectionalLight(0xff7950, 5.0);
-    this.rimLight.position.set(-4.8, 5.6, -5.2);
-    this.scene.add(this.rimLight);
-    this.scene.add(this.rimLight.target);
-
-    [this.keyLight.target, this.fillLight.target, this.rimLight.target]
-      .forEach((target) => target.position.set(0, 1.25, 0));
-
+    // Contact shadows are rendered into a cached texture. Native directional
+    // shadow maps remain disabled so the two systems cannot double up.
+    this.engine.setShadowEnabled(false);
+    this.engine.setBloomStrength(0);
     return this;
   }
 
-  applyPreset(preset, { immediate = false } = {}) {
+  applyBackdropPreset(preset, { immediate = false } = {}) {
+    const targetTone = Number(preset?.backdropTone);
+    if (!Number.isFinite(targetTone)) return false;
+
+    if (immediate) {
+      this.backdrop.setTone(targetTone);
+      this.backdropTween = null;
+      return true;
+    }
+
+    this.backdropTween = {
+      from: this.backdrop.getTone(),
+      to: targetTone,
+      startedAt: performance.now(),
+      duration: 520,
+    };
+    return true;
+  }
+
+  applyLightingPreset(preset, { immediate = false } = {}) {
+    if (!preset) return false;
     const target = {
-      top: new THREE.Color(preset.top),
-      bottom: new THREE.Color(preset.bottom),
-      accent: new THREE.Color(preset.accent),
-      floor: new THREE.Color(preset.floor),
-      keyColor: new THREE.Color(preset.keyColor),
-      fillColor: new THREE.Color(preset.fillColor),
-      rimColor: new THREE.Color(preset.rimColor),
-      accentStrength: preset.accentStrength,
-      floorRoughness: preset.floorRoughness,
       exposure: preset.exposure,
       environment: preset.environment,
+      environmentRotation: preset.environmentRotation ?? this.environment.rotation,
       key: preset.key,
       fill: preset.fill,
       rim: preset.rim,
       bloom: preset.bloom,
       shadow: preset.shadow,
+      shadowSoftness: preset.shadowSoftness,
     };
 
-    this.lookTween = {
-      from: this.getCurrentLook(),
+    if (immediate) {
+      this.#applyLighting(target);
+      this.lightingTween = null;
+      return true;
+    }
+
+    this.lightingTween = {
+      from: this.getCurrentLighting(),
       to: target,
       startedAt: performance.now(),
-      duration: immediate ? 1 : 850,
+      duration: 720,
     };
+    return true;
+  }
+
+  // Stable compatibility method for V1.2 / V1.3 callers.
+  applyPreset(preset, options = {}) {
+    this.applyBackdropPreset(preset, options);
+    this.applyLightingPreset(preset, options);
+  }
+
+  cancelBackdropTween() {
+    this.backdropTween = null;
+  }
+
+  cancelLightingTween() {
+    this.lightingTween = null;
   }
 
   cancelPresetTween() {
-    this.lookTween = null;
+    this.cancelBackdropTween();
+    this.cancelLightingTween();
+  }
+
+  getCurrentLighting() {
+    const lights = this.lightRig.getCurrent();
+    return {
+      exposure: this.renderer.toneMappingExposure,
+      environment: this.environment.intensity,
+      environmentRotation: this.environment.rotation,
+      key: lights.key,
+      fill: lights.fill,
+      rim: lights.rim,
+      bloom: this.engine.bloomPass.strength,
+      shadow: this.ground.contactShadow.opacity,
+      shadowSoftness: this.ground.contactShadow.softness,
+    };
   }
 
   getCurrentLook() {
     return {
-      top: this.backgroundMaterial.uniforms.topColor.value.clone(),
-      bottom: this.backgroundMaterial.uniforms.bottomColor.value.clone(),
-      accent: this.backgroundMaterial.uniforms.accentColor.value.clone(),
-      floor: this.floorMesh.material.color.clone(),
-      keyColor: this.keyLight.color.clone(),
-      fillColor: this.fillLight.color.clone(),
-      rimColor: this.rimLight.color.clone(),
-      accentStrength: this.backgroundMaterial.uniforms.accentStrength.value,
-      floorRoughness: this.floorMesh.material.roughness,
-      exposure: this.renderer.toneMappingExposure,
-      environment: this.scene.environmentIntensity,
-      key: this.keyLight.intensity,
-      fill: this.fillLight.intensity,
-      rim: this.rimLight.intensity,
-      bloom: this.engine.bloomPass.strength,
-      shadow: this.contactShadow.material.opacity,
+      backdropTone: this.backdrop.getTone(),
+      ...this.getCurrentLighting(),
     };
   }
 
-  update(now) {
-    const tween = this.lookTween;
-    if (!tween) return;
-    const raw = Math.min(1, (now - tween.startedAt) / tween.duration);
-    const t = easeInOutCubic(raw);
-    const { from, to } = tween;
+  update(now, { dynamic = false } = {}) {
+    if (this.backdropTween) {
+      const tween = this.backdropTween;
+      const raw = Math.min(1, (now - tween.startedAt) / tween.duration);
+      const t = easeInOutCubic(raw);
+      this.backdrop.setTone(THREE.MathUtils.lerp(tween.from, tween.to, t));
+      if (raw >= 1) this.backdropTween = null;
+    }
 
-    this.backgroundMaterial.uniforms.topColor.value.copy(from.top).lerp(to.top, t);
-    this.backgroundMaterial.uniforms.bottomColor.value.copy(from.bottom).lerp(to.bottom, t);
-    this.backgroundMaterial.uniforms.accentColor.value.copy(from.accent).lerp(to.accent, t);
-    this.floorMesh.material.color.copy(from.floor).lerp(to.floor, t);
-    this.keyLight.color.copy(from.keyColor).lerp(to.keyColor, t);
-    this.fillLight.color.copy(from.fillColor).lerp(to.fillColor, t);
-    this.rimLight.color.copy(from.rimColor).lerp(to.rimColor, t);
+    if (this.lightingTween) {
+      const tween = this.lightingTween;
+      const raw = Math.min(1, (now - tween.startedAt) / tween.duration);
+      const t = easeInOutCubic(raw);
+      const { from, to } = tween;
+      this.#applyLighting({
+        exposure: THREE.MathUtils.lerp(from.exposure, to.exposure, t),
+        environment: THREE.MathUtils.lerp(from.environment, to.environment, t),
+        environmentRotation: THREE.MathUtils.lerp(from.environmentRotation, to.environmentRotation, t),
+        key: THREE.MathUtils.lerp(from.key, to.key, t),
+        fill: THREE.MathUtils.lerp(from.fill, to.fill, t),
+        rim: THREE.MathUtils.lerp(from.rim, to.rim, t),
+        bloom: THREE.MathUtils.lerp(from.bloom, to.bloom, t),
+        shadow: THREE.MathUtils.lerp(from.shadow, to.shadow, t),
+        shadowSoftness: THREE.MathUtils.lerp(from.shadowSoftness, to.shadowSoftness, t),
+      });
+      if (raw >= 1) this.lightingTween = null;
+    }
 
-    this.backgroundMaterial.uniforms.accentStrength.value = THREE.MathUtils.lerp(from.accentStrength, to.accentStrength, t);
-    this.floorMesh.material.roughness = THREE.MathUtils.lerp(from.floorRoughness, to.floorRoughness, t);
-    this.engine.setExposure(THREE.MathUtils.lerp(from.exposure, to.exposure, t));
-    this.scene.environmentIntensity = THREE.MathUtils.lerp(from.environment, to.environment, t);
-    this.keyLight.intensity = THREE.MathUtils.lerp(from.key, to.key, t);
-    this.fillLight.intensity = THREE.MathUtils.lerp(from.fill, to.fill, t);
-    this.rimLight.intensity = THREE.MathUtils.lerp(from.rim, to.rim, t);
-    this.engine.setBloomStrength(THREE.MathUtils.lerp(from.bloom, to.bloom, t));
-    this.contactShadow.material.opacity = THREE.MathUtils.lerp(from.shadow, to.shadow, t);
+    this.ground.update({ dynamic, now });
+  }
 
-    if (raw >= 1) this.lookTween = null;
+  #applyLighting(look) {
+    this.engine.setExposure(look.exposure);
+    this.environment.setIntensity(look.environment);
+    this.environment.setRotation(look.environmentRotation);
+    this.lightRig.setKeyIntensity(look.key);
+    this.lightRig.setFillIntensity(look.fill);
+    this.lightRig.setRimIntensity(look.rim);
+    this.engine.setBloomStrength(look.bloom);
+    this.ground.setOpacity(look.shadow);
+    this.ground.setSoftness(look.shadowSoftness);
+  }
+
+  setBackdropTone(value) {
+    this.backdrop.setTone(value);
   }
 
   setExposure(value) {
@@ -197,15 +188,35 @@ export class StudioSystem {
   }
 
   setEnvironmentIntensity(value) {
-    this.scene.environmentIntensity = value;
+    this.environment.setIntensity(value);
+  }
+
+  setEnvironmentRotation(value) {
+    this.environment.setRotation(value);
   }
 
   setKeyIntensity(value) {
-    this.keyLight.intensity = value;
+    this.lightRig.setKeyIntensity(value);
+  }
+
+  setFillIntensity(value) {
+    this.lightRig.setFillIntensity(value);
   }
 
   setRimIntensity(value) {
-    this.rimLight.intensity = value;
+    this.lightRig.setRimIntensity(value);
+  }
+
+  setGroundOffset(value) {
+    this.ground.setGroundOffset(value);
+  }
+
+  setShadowOpacity(value) {
+    this.ground.setOpacity(value);
+  }
+
+  setShadowSoftness(value) {
+    this.ground.setSoftness(value);
   }
 
   setBloom(value) {
@@ -214,150 +225,39 @@ export class StudioSystem {
 
   setFloorEnabled(enabled) {
     this.floorEnabled = Boolean(enabled);
-    this.floorMesh.visible = this.floorEnabled;
-    this.contactShadow.visible = this.floorEnabled;
+    this.ground.setEnabled(this.floorEnabled);
   }
 
   setShadowsEnabled(enabled) {
     this.shadowsEnabled = Boolean(enabled);
-    this.engine.setShadowEnabled(this.shadowsEnabled);
-    this.keyLight.castShadow = this.shadowsEnabled;
+    this.ground.setShadowsEnabled(this.shadowsEnabled);
   }
 
-  setShadowQuality(size) {
-    this.keyLight.shadow.mapSize.set(size, size);
-    this.keyLight.shadow.map?.dispose();
-    this.keyLight.shadow.map = null;
+  setShadowQuality(profile) {
+    this.ground.setQuality(profile);
   }
 
-  updateForBounds(bounds, radius, { updateShadowScale = true } = {}) {
+  updateForBounds(bounds, radius) {
     if (!bounds || bounds.isEmpty()) return;
-    const size = bounds.getSize(new THREE.Vector3());
-    const extent = Math.max(4, radius * 2.25);
-    const shadowCamera = this.keyLight.shadow.camera;
-    shadowCamera.left = -extent;
-    shadowCamera.right = extent;
-    shadowCamera.top = extent;
-    shadowCamera.bottom = -extent;
-    shadowCamera.near = 0.1;
-    shadowCamera.far = Math.max(30, extent * 5);
-    shadowCamera.updateProjectionMatrix();
-
-    const targetY = bounds.min.y + size.y * 0.48;
-    [this.keyLight.target, this.fillLight.target, this.rimLight.target].forEach((target) => {
-      target.position.set(0, targetY, 0);
-      target.updateMatrixWorld();
-    });
-
-    if (updateShadowScale) {
-      const footprint = Math.max(size.x, size.z, 1.2);
-      this.contactShadow.scale.set(footprint * 1.72, footprint * 1.72, 1);
-      this.contactShadow.position.x = (bounds.min.x + bounds.max.x) * 0.5;
-      this.contactShadow.position.z = (bounds.min.z + bounds.max.z) * 0.5;
-    }
+    this.lightRig.updateForBounds(bounds);
+    this.ground.updateForBounds(bounds, radius);
   }
 
-  updateCameraPosition(position) {
-    this.backgroundSphere.position.copy(position);
+  markContactShadowDirty() {
+    this.ground.markDirty();
   }
 
-  #createCyclorama() {
-    const width = 44;
-    const frontZ = 18;
-    const curveStartZ = -7;
-    const radius = 7;
-    const wallHeight = 26;
-    const path = [];
-
-    const floorSegments = 28;
-    for (let i = 0; i <= floorSegments; i += 1) {
-      const t = i / floorSegments;
-      path.push({ y: 0, z: THREE.MathUtils.lerp(frontZ, curveStartZ, t) });
-    }
-
-    const curveSegments = 28;
-    for (let i = 1; i <= curveSegments; i += 1) {
-      const theta = (i / curveSegments) * Math.PI * 0.5;
-      path.push({
-        y: radius * (1 - Math.cos(theta)),
-        z: curveStartZ - radius * Math.sin(theta),
-      });
-    }
-
-    const wallSegments = 22;
-    for (let i = 1; i <= wallSegments; i += 1) {
-      const t = i / wallSegments;
-      path.push({ y: radius + wallHeight * t, z: curveStartZ - radius });
-    }
-
-    const positions = [];
-    const uvs = [];
-    const indices = [];
-
-    path.forEach((point, row) => {
-      positions.push(-width / 2, point.y, point.z, width / 2, point.y, point.z);
-      uvs.push(0, row / (path.length - 1), 1, row / (path.length - 1));
-    });
-
-    for (let row = 0; row < path.length - 1; row += 1) {
-      const a = row * 2;
-      const b = a + 1;
-      const c = a + 2;
-      const d = a + 3;
-      indices.push(a, b, c, b, d, c);
-    }
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-    geometry.setIndex(indices);
-    geometry.computeVertexNormals();
-
-    const material = new THREE.MeshPhysicalMaterial({
-      name: 'PV Studio Floor',
-      color: new THREE.Color('#111316'),
-      roughness: 0.7,
-      metalness: 0.02,
-      clearcoat: 0.06,
-      clearcoatRoughness: 0.72,
-      side: THREE.FrontSide,
-    });
-
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = 'Product VIS Cyclorama';
-    mesh.receiveShadow = true;
-    return mesh;
+  renderContactShadow({ force = true } = {}) {
+    return this.ground.update({ force, now: performance.now() });
   }
 
-  #createContactShadow() {
-    const size = 512;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const context = canvas.getContext('2d');
-    const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    gradient.addColorStop(0, 'rgba(0,0,0,0.82)');
-    gradient.addColorStop(0.2, 'rgba(0,0,0,0.58)');
-    gradient.addColorStop(0.58, 'rgba(0,0,0,0.18)');
-    gradient.addColorStop(1, 'rgba(0,0,0,0)');
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, size, size);
+  // Stable no-op for legacy camera-following backdrop callers.
+  updateCameraPosition() {}
 
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.needsUpdate = true;
-
-    const material = new THREE.MeshBasicMaterial({
-      map: texture,
-      transparent: true,
-      depthWrite: false,
-      opacity: 0.48,
-      color: 0x000000,
-    });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.y = 0.012;
-    mesh.renderOrder = 2;
-    return mesh;
+  dispose() {
+    this.ground?.dispose();
+    this.lightRig?.dispose();
+    this.environment?.dispose();
+    this.scene.background = null;
   }
 }

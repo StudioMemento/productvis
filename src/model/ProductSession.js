@@ -1,6 +1,16 @@
 import * as THREE from 'three';
 import { forEachMaterial } from '../utils/materials.js';
 import { easeInOutCubic } from '../utils/math.js';
+import { CONTACT_SHADOW_LAYER } from '../config/runtime.js';
+import { analyzeMaterialDiagnostics, materialSideName } from './MaterialDiagnostics.js';
+import { ProductStructure } from '../structure/ProductStructure.js';
+import { ProductVariants } from '../configurator/ProductVariants.js';
+import { ProductExplosion } from '../story/ProductExplosion.js';
+
+function mapMaterials(materialOrArray, mapper) {
+  if (Array.isArray(materialOrArray)) return materialOrArray.map((material) => mapper(material));
+  return mapper(materialOrArray);
+}
 
 export class ProductSession {
   constructor({ scene, renderer, getEnvironmentTexture, onBoundsChanged } = {}) {
@@ -19,6 +29,7 @@ export class ProductSession {
     this.fileSize = null;
     this.userScale = 1;
     this.userOffset = 0;
+    this.userPositionXZ = { x: 0, z: 0 };
     this.groundY = 0;
     this.modelRadius = 1.8;
     this.modelHeight = 3;
@@ -26,34 +37,95 @@ export class ProductSession {
     this.shadowsEnabled = true;
     this.materialMode = 'original';
     this.transformTween = null;
+    this.backfaceRepairEnabled = false;
+    this.materialSideOverrides = new Map();
+    this.variantAppearanceByMesh = {};
+    this.variantMaterialInstances = new Set();
+    this.materialDiagnostics = {
+      totalSlots: 0,
+      uniqueMaterials: 0,
+      doubleSided: 0,
+      transparent: 0,
+      alphaMasked: 0,
+      alphaBlended: 0,
+      glass: 0,
+      backfaceCandidates: 0,
+      health: 'safe',
+      materials: [],
+      notes: [],
+    };
+    this.structure = new ProductStructure({
+      scene: this.scene,
+      onChange: ({ boundsChanged }) => {
+        if (!this.sessionRoot) return;
+        if (boundsChanged) {
+          this.recomputeGrounding();
+          this.updateBounds({ updateShadowScale: true });
+        }
+      },
+    });
+    this.variants = new ProductVariants({
+      getValidPartIds: () => this.structure.getValidPartIds(),
+      expandAppearanceTarget: (partId) => this.structure.expandPartToMeshIds(partId),
+      onApply: ({ visibility, appearanceByMesh }) => {
+        this.variantAppearanceByMesh = appearanceByMesh || {};
+        this.structure.setVariantVisibilityOverrides(visibility || {});
+        this.applyMaterialPresentation();
+      },
+    });
+    this.explosion = new ProductExplosion({
+      getRoot: () => this.assetRoot,
+      getPart: (partId) => this.structure.getPart(partId),
+      getValidPartIds: () => this.structure.getValidPartIds(),
+      getVisibleBounds: (target) => this.structure.getVisibleBounds(target),
+      onChange: ({ boundsChanged }) => {
+        if (boundsChanged && this.sessionRoot) this.updateBounds({ updateShadowScale: true });
+      },
+    });
 
     this.protectedMaterials = new Set();
-    this.overrideMaterials = {
-      clay: new THREE.MeshPhysicalMaterial({
-        name: 'PV Clay',
+    this.overrideMaterialVariants = this.#createOverrideMaterialVariants();
+    Object.values(this.overrideMaterialVariants).forEach((variants) => {
+      Object.values(variants).forEach((material) => this.protectedMaterials.add(material));
+    });
+  }
+
+  #createOverrideMaterialVariants() {
+    const definitions = {
+      clay: {
         color: 0xd9d4cb,
         roughness: 0.57,
         metalness: 0.04,
         clearcoat: 0.12,
         clearcoatRoughness: 0.5,
-      }),
-      chrome: new THREE.MeshPhysicalMaterial({
-        name: 'PV Chrome',
+      },
+      chrome: {
         color: 0xc7cdd2,
         roughness: 0.16,
         metalness: 1,
         clearcoat: 0.4,
         clearcoatRoughness: 0.12,
-      }),
-      matte: new THREE.MeshPhysicalMaterial({
-        name: 'PV Matte',
+      },
+      matte: {
         color: 0x17191d,
         roughness: 0.93,
         metalness: 0.02,
         clearcoat: 0.02,
-      }),
+      },
     };
-    Object.values(this.overrideMaterials).forEach((material) => this.protectedMaterials.add(material));
+
+    const variants = {};
+    Object.entries(definitions).forEach(([mode, params]) => {
+      const front = new THREE.MeshPhysicalMaterial({ name: `PV ${mode} front`, ...params, side: THREE.FrontSide });
+      const back = front.clone();
+      back.name = `PV ${mode} back`;
+      back.side = THREE.BackSide;
+      const double = front.clone();
+      double.name = `PV ${mode} double`;
+      double.side = THREE.DoubleSide;
+      variants[mode] = { front, back, double };
+    });
+    return variants;
   }
 
   setModel(asset, options = {}) {
@@ -72,19 +144,30 @@ export class ProductSession {
     this.fileSize = options.fileSize ?? null;
     this.userScale = 1;
     this.userOffset = 0;
+    this.userPositionXZ = { x: 0, z: 0 };
     this.materialMode = 'original';
     this.transformTween = null;
+    this.backfaceRepairEnabled = false;
+    this.materialSideOverrides.clear();
+    this.variantAppearanceByMesh = {};
 
     this.scene.add(this.sessionRoot);
     this.sessionRoot.updateMatrixWorld(true);
+    this.structure.attach(this.assetRoot);
+    this.variants.attach();
+    this.explosion.attach();
     this.recomputeGrounding();
     this.updateBounds({ updateShadowScale: true });
-    this.setMaterialMode('original');
+    this.applyMaterialPresentation();
 
     return {
       stats: this.collectStats(),
       metrics: this.getMetrics(),
       asset: this.assetRoot,
+      diagnostics: this.getMaterialDiagnostics(),
+      structure: this.getStructureReport(),
+      variants: this.getVariantReport(),
+      explosion: this.getExplosionReport(),
     };
   }
 
@@ -97,11 +180,14 @@ export class ProductSession {
       meshCount += 1;
       object.castShadow = this.shadowsEnabled;
       object.receiveShadow = true;
+      object.layers.enable(CONTACT_SHADOW_LAYER);
       object.frustumCulled = true;
       object.userData.__pvOriginalMaterial = object.material;
 
       forEachMaterial(object.material, (material) => {
         material.needsUpdate = true;
+        material.userData = material.userData || {};
+        if (!('pvOriginalSide' in material.userData)) material.userData.pvOriginalSide = material.side;
         Object.values(material).forEach((value) => {
           if (value?.isTexture) value.anisotropy = maxAnisotropy;
         });
@@ -109,6 +195,8 @@ export class ProductSession {
     });
 
     if (meshCount === 0) throw new Error('No mesh geometry was found in this GLB.');
+
+    this.materialDiagnostics = analyzeMaterialDiagnostics(asset, { forEachMaterial });
 
     asset.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(asset);
@@ -155,6 +243,10 @@ export class ProductSession {
 
   disposeCurrent() {
     if (!this.sessionRoot) return;
+    this.explosion.detach();
+    this.variants.detach();
+    this.#disposeVariantMaterials();
+    this.structure.detach();
     this.scene.remove(this.sessionRoot);
 
     const geometries = new Set();
@@ -224,7 +316,9 @@ export class ProductSession {
   updateBounds({ updateShadowScale = true } = {}) {
     if (!this.sessionRoot) return null;
     this.sessionRoot.updateMatrixWorld(true);
-    this.modelBounds.setFromObject(this.sessionRoot);
+    const visibleBounds = this.structure.getVisibleBounds(new THREE.Box3());
+    if (!visibleBounds.isEmpty()) this.modelBounds.copy(visibleBounds);
+    else this.modelBounds.setFromObject(this.sessionRoot, true);
     const size = this.modelBounds.getSize(new THREE.Vector3());
     const sphere = this.modelBounds.getBoundingSphere(new THREE.Sphere());
     this.modelRadius = Math.max(sphere.radius, 0.4);
@@ -248,9 +342,11 @@ export class ProductSession {
     if (!this.sessionRoot) return;
     this.sessionRoot.position.y = 0;
     this.sessionRoot.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(this.sessionRoot);
+    const box = this.structure.getVisibleBounds(new THREE.Box3());
+    if (box.isEmpty()) box.setFromObject(this.sessionRoot, true);
     this.groundY = -box.min.y;
     this.sessionRoot.position.y = this.groundY + this.userOffset;
+    this.userPositionXZ = { x: this.sessionRoot.position.x, z: this.sessionRoot.position.z };
     this.sessionRoot.updateMatrixWorld(true);
   }
 
@@ -259,12 +355,14 @@ export class ProductSession {
     this.sessionRoot.position.x = 0;
     this.sessionRoot.position.z = 0;
     this.sessionRoot.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(this.sessionRoot);
+    const box = this.structure.getVisibleBounds(new THREE.Box3());
+    if (box.isEmpty()) box.setFromObject(this.sessionRoot, true);
     const center = box.getCenter(new THREE.Vector3());
     this.sessionRoot.position.x -= center.x;
     this.sessionRoot.position.z -= center.z;
     this.recomputeGrounding();
     this.updateBounds({ updateShadowScale: true });
+    return { ...this.userPositionXZ };
   }
 
   ground() {
@@ -287,6 +385,61 @@ export class ProductSession {
     this.userOffset = value;
     this.sessionRoot.position.y = this.groundY + value;
     this.sessionRoot.updateMatrixWorld(true);
+    this.updateBounds({ updateShadowScale: false });
+  }
+
+  setPositionXZ(value = {}) {
+    if (!this.sessionRoot) return null;
+    const x = Number.isFinite(Number(value.x)) ? Number(value.x) : 0;
+    const z = Number.isFinite(Number(value.z)) ? Number(value.z) : 0;
+    this.sessionRoot.position.x = x;
+    this.sessionRoot.position.z = z;
+    this.userPositionXZ = { x, z };
+    this.sessionRoot.updateMatrixWorld(true);
+    this.updateBounds({ updateShadowScale: true });
+    return { ...this.userPositionXZ };
+  }
+
+  applyTransformState(state = {}) {
+    if (!this.sessionRoot || !this.userTransformRoot) return null;
+    const scale = Number.isFinite(Number(state.userScale ?? state.scale))
+      ? Number(state.userScale ?? state.scale)
+      : 1;
+    const offset = Number.isFinite(Number(state.userOffset ?? state.offset))
+      ? Number(state.userOffset ?? state.offset)
+      : 0;
+    const rotation = state.rotation || {};
+    const positionXZ = state.positionXZ || {};
+
+    this.transformTween = null;
+    this.userScale = scale;
+    this.userOffset = offset;
+    this.userTransformRoot.scale.setScalar(scale);
+    this.userTransformRoot.rotation.set(
+      Number(rotation.x) || 0,
+      Number(rotation.y) || 0,
+      Number(rotation.z) || 0,
+      'XYZ',
+    );
+    this.sessionRoot.position.x = Number(positionXZ.x) || 0;
+    this.sessionRoot.position.z = Number(positionXZ.z) || 0;
+    this.userPositionXZ = { x: this.sessionRoot.position.x, z: this.sessionRoot.position.z };
+    this.recomputeGrounding();
+    this.updateBounds({ updateShadowScale: true });
+    return this.getTransformState();
+  }
+
+  setTransformState(state = {}) {
+    return this.applyTransformState(state);
+  }
+
+  getTransformState() {
+    return {
+      userScale: this.userScale,
+      userOffset: this.userOffset,
+      rotation: this.getUserRotation(),
+      positionXZ: { ...this.userPositionXZ },
+    };
   }
 
   rotate(axis, onComplete) {
@@ -309,7 +462,13 @@ export class ProductSession {
     return true;
   }
 
+  prepareAnimationFrame() {
+    this.explosion.prepareFrame();
+  }
+
   update(now) {
+    this.structure.update(now);
+    this.explosion.update(now);
     const tween = this.transformTween;
     if (!tween || !this.userTransformRoot) return;
     const raw = Math.min(1, (now - tween.startedAt) / tween.duration);
@@ -324,6 +483,12 @@ export class ProductSession {
     }
   }
 
+  getUserRotation() {
+    if (!this.userTransformRoot) return { x: 0, y: 0, z: 0 };
+    const euler = new THREE.Euler().setFromQuaternion(this.userTransformRoot.quaternion, 'XYZ');
+    return { x: euler.x, y: euler.y, z: euler.z };
+  }
+
   resetTransform() {
     if (!this.sessionRoot) return;
     this.userTransformRoot.rotation.set(0, 0, 0);
@@ -333,25 +498,376 @@ export class ProductSession {
     this.sessionRoot.position.set(0, 0, 0);
     this.userScale = 1;
     this.userOffset = 0;
+    this.userPositionXZ = { x: 0, z: 0 };
     this.transformTween = null;
     this.recomputeGrounding();
     this.updateBounds({ updateShadowScale: true });
   }
 
-  setMaterialMode(mode) {
-    if (!this.overrideMaterials[mode] && mode !== 'original') return false;
-    this.materialMode = mode;
+  #resolveSide(originalMaterial) {
+    const originalSide = originalMaterial?.userData?.pvOriginalSide ?? originalMaterial?.side ?? THREE.FrontSide;
+    const diagnosticId = String(originalMaterial?.userData?.pvDiagnosticId ?? '');
+    const override = this.materialSideOverrides.get(diagnosticId) || 'auto';
 
-    this.sessionRoot?.traverse((object) => {
+    if (override === 'original') return originalSide;
+    if (override === 'front') return THREE.FrontSide;
+    if (override === 'back') return THREE.BackSide;
+    if (override === 'double') return THREE.DoubleSide;
+
+    const candidate = Boolean(originalMaterial?.userData?.pvBackfaceCandidate);
+    if (this.backfaceRepairEnabled && candidate) return THREE.DoubleSide;
+    return originalSide;
+  }
+
+  #resolveOverrideMaterial(mode, originalMaterial) {
+    const variants = this.overrideMaterialVariants[mode];
+    if (!variants) return originalMaterial;
+    const side = this.#resolveSide(originalMaterial);
+    if (side === THREE.DoubleSide) return variants.double;
+    if (side === THREE.BackSide) return variants.back;
+    return variants.front;
+  }
+
+  #disposeVariantMaterials() {
+    this.variantMaterialInstances.forEach((material) => material?.dispose?.());
+    this.variantMaterialInstances.clear();
+  }
+
+  #applyVariantStyle(baseMaterial, style, objectName = 'mesh') {
+    if (!baseMaterial || !style || !Object.keys(style).length) return baseMaterial;
+    const material = baseMaterial.clone();
+    material.name = `${baseMaterial.name || 'Material'} · ${objectName} variant`;
+    if (style.color && material.color?.set) material.color.set(style.color);
+    if ('roughness' in style && 'roughness' in material) material.roughness = style.roughness;
+    if ('metalness' in style && 'metalness' in material) material.metalness = style.metalness;
+    if ('clearcoat' in style && 'clearcoat' in material) material.clearcoat = style.clearcoat;
+    material.needsUpdate = true;
+    this.variantMaterialInstances.add(material);
+    return material;
+  }
+
+  applyMaterialPresentation() {
+    if (!this.sessionRoot) return;
+    this.#disposeVariantMaterials();
+    this.sessionRoot.traverse((object) => {
       if (!object.isMesh) return;
       const original = object.userData.__pvOriginalMaterial;
       if (!original) return;
-      object.material = mode === 'original' ? original : this.overrideMaterials[mode];
-      forEachMaterial(object.material, (material) => {
-        material.needsUpdate = true;
+
+      const partId = object.userData.__pvStructureId || null;
+      const variantStyle = partId ? this.variantAppearanceByMesh[partId] : null;
+      if (this.materialMode === 'original') {
+        object.material = mapMaterials(original, (material) => {
+          material.side = this.#resolveSide(material);
+          material.needsUpdate = true;
+          return this.#applyVariantStyle(material, variantStyle, object.name || partId || 'mesh');
+        });
+      } else {
+        object.material = mapMaterials(original, (material) => {
+          const base = this.#resolveOverrideMaterial(this.materialMode, material);
+          return this.#applyVariantStyle(base, variantStyle, object.name || partId || 'mesh');
+        });
+      }
+    });
+  }
+
+  setMaterialMode(mode) {
+    if (!this.overrideMaterialVariants[mode] && mode !== 'original') return false;
+    this.materialMode = mode;
+    this.applyMaterialPresentation();
+    return true;
+  }
+
+  setBackfaceRepairEnabled(enabled) {
+    this.backfaceRepairEnabled = Boolean(enabled);
+    this.applyMaterialPresentation();
+    return this.backfaceRepairEnabled;
+  }
+
+  setMaterialSideOverride(materialId, mode) {
+    const id = String(materialId);
+    const allowed = new Set(['auto', 'original', 'front', 'back', 'double']);
+    if (!allowed.has(mode)) return false;
+    const exists = this.materialDiagnostics.materials.some((item) => String(item.id) === id);
+    if (!exists) return false;
+    if (mode === 'auto') this.materialSideOverrides.delete(id);
+    else this.materialSideOverrides.set(id, mode);
+    this.applyMaterialPresentation();
+    return true;
+  }
+
+  setMaterialSideOverrides(overrides = {}) {
+    this.materialSideOverrides.clear();
+    Object.entries(overrides).forEach(([id, mode]) => {
+      if (['original', 'front', 'back', 'double'].includes(mode)) {
+        this.materialSideOverrides.set(String(id), mode);
+      }
+    });
+    this.applyMaterialPresentation();
+    return this.getMaterialSideOverrides();
+  }
+
+  clearMaterialSideOverrides() {
+    this.materialSideOverrides.clear();
+    this.applyMaterialPresentation();
+  }
+
+  getMaterialSideOverrides() {
+    return Object.fromEntries([...this.materialSideOverrides.entries()].sort(([a], [b]) => Number(a) - Number(b)));
+  }
+
+  getMaterialDiagnostics() {
+    const materialById = new Map();
+    this.assetRoot?.traverse((object) => {
+      if (!object.isMesh) return;
+      forEachMaterial(object.userData.__pvOriginalMaterial || object.material, (material) => {
+        const id = String(material?.userData?.pvDiagnosticId ?? '');
+        if (id && !materialById.has(id)) materialById.set(id, material);
       });
     });
-    return true;
+
+    const materials = this.materialDiagnostics.materials.map((item) => {
+      const id = String(item.id);
+      const material = materialById.get(id);
+      const sideOverride = this.materialSideOverrides.get(id) || 'auto';
+      const effectiveSide = material ? materialSideName(this.#resolveSide(material)) : item.originalSide;
+      return {
+        ...item,
+        sideOverride,
+        effectiveSide,
+        repairActive: effectiveSide !== item.originalSide,
+      };
+    });
+
+    return {
+      ...this.materialDiagnostics,
+      materials,
+      backfaceRepairEnabled: this.backfaceRepairEnabled,
+      manualOverrides: this.materialSideOverrides.size,
+      materialSideOverrides: this.getMaterialSideOverrides(),
+    };
+  }
+
+  getStructureReport(query = '') {
+    return this.structure.getReport(query);
+  }
+
+  getStructureState() {
+    return {
+      ...this.structure.getState(),
+      ...this.variants.getState(),
+      ...this.explosion.getState(),
+    };
+  }
+
+  applyStructureState(state = {}) {
+    this.structure.applyState(state);
+    this.variants.applyState(state);
+    this.explosion.applyState(state, { notify: false, immediate: true });
+    this.updateBounds({ updateShadowScale: true });
+    return this.getStructureState();
+  }
+
+  resetStructure() {
+    this.structure.reset();
+    return this.getStructureState();
+  }
+
+  getVariantReport() {
+    return this.variants.getReport();
+  }
+
+  createVariantGroup(name, options) {
+    return this.variants.createGroup(name, options);
+  }
+
+  deleteVariantGroup(id) {
+    return this.variants.deleteGroup(id);
+  }
+
+  setVariantGroupRequired(id, required) {
+    return this.variants.setGroupRequired(id, required);
+  }
+
+  createVariantOption(groupId, option) {
+    return this.variants.createOption(groupId, option);
+  }
+
+  deleteVariantOption(groupId, optionId) {
+    return this.variants.deleteOption(groupId, optionId);
+  }
+
+  setVariantDefaultOption(groupId, optionId) {
+    return this.variants.setDefaultOption(groupId, optionId);
+  }
+
+  activateVariantOption(groupId, optionId) {
+    return this.variants.activateOption(groupId, optionId);
+  }
+
+  clearVariantSelection(groupId) {
+    return this.variants.clearSelection(groupId);
+  }
+
+  resetVariantSelections() {
+    return this.variants.resetSelectionsToDefaults();
+  }
+
+  setVariantSelections(selections = {}, options = {}) {
+    return this.variants.setSelections(selections, options);
+  }
+
+  captureVariantConfiguration(name) {
+    return this.variants.captureConfiguration(name);
+  }
+
+  applyVariantConfiguration(id) {
+    return this.variants.applyConfiguration(id);
+  }
+
+  deleteVariantConfiguration(id) {
+    return this.variants.deleteConfiguration(id);
+  }
+
+  getExplosionReport() {
+    return this.explosion.getReport();
+  }
+
+  setPartExplosionDistance(partId, distance, direction = 'auto') {
+    const changed = this.explosion.setPartDistance(partId, distance, direction);
+    if (changed) this.updateBounds({ updateShadowScale: true });
+    return changed;
+  }
+
+  clearPartExplosion(partId) {
+    const changed = this.explosion.clearPart(partId);
+    if (changed) this.updateBounds({ updateShadowScale: true });
+    return changed;
+  }
+
+  clearExplosion({ duration = 0, easing = 'cinematic' } = {}) {
+    this.explosion.clearOffsets({ duration, easing });
+    if (duration <= 0) this.updateBounds({ updateShadowScale: true });
+  }
+
+  captureExplodedState(name) {
+    return this.explosion.captureState(name);
+  }
+
+  applyExplodedState(id, options = {}) {
+    return this.explosion.applyExplodedState(id, options);
+  }
+
+  deleteExplodedState(id) {
+    return this.explosion.deleteState(id);
+  }
+
+  resetExplosion({ clearLibrary = true } = {}) {
+    this.explosion.reset({ clearLibrary });
+    this.updateBounds({ updateShadowScale: true });
+    return this.explosion.getState();
+  }
+
+  pauseExplosionTransition(options = {}) {
+    return this.explosion.pauseTransition(options);
+  }
+
+  resumeExplosionTransition(options = {}) {
+    return this.explosion.resumeTransition(options);
+  }
+
+  stopExplosionTransition(options = {}) {
+    return this.explosion.stopTransition(options);
+  }
+
+  isExplosionDynamic() {
+    return this.explosion.isDynamic();
+  }
+
+  selectPart(id) {
+    return this.structure.selectPart(id);
+  }
+
+  togglePartVisibility(id) {
+    return this.structure.togglePartVisibility(id);
+  }
+
+  setPartVisibility(id, visible) {
+    return this.structure.setPartVisibility(id, visible);
+  }
+
+  applyPartVisibilityPatch(patch = {}) {
+    return this.structure.applyVisibilityPatch(patch);
+  }
+
+  setPartVisibilityOverrides(overrides = {}) {
+    return this.structure.setVisibilityOverrides(overrides);
+  }
+
+  isolatePart(id) {
+    return this.structure.isolatePart(id);
+  }
+
+  showAllParts() {
+    this.structure.showAllParts();
+  }
+
+  resetPartVisibility() {
+    this.structure.resetVisibility();
+  }
+
+  captureVisibilityState(name) {
+    return this.structure.captureVisibilityState(name);
+  }
+
+  applyVisibilityState(id) {
+    return this.structure.applyVisibilityState(id);
+  }
+
+  deleteVisibilityState(id) {
+    return this.structure.deleteVisibilityState(id);
+  }
+
+  createAnchorAtPart(partId, name) {
+    return this.structure.createAnchorAtPart(partId, name);
+  }
+
+  createAnchorAtWorld(worldPosition, name) {
+    return this.structure.createAnchorAtWorld(worldPosition, name);
+  }
+
+  deleteAnchor(id) {
+    return this.structure.deleteAnchor(id);
+  }
+
+  selectAnchor(id) {
+    return this.structure.selectAnchor(id);
+  }
+
+  setAnchorDisplay(mode) {
+    return this.structure.setAnchorDisplay(mode);
+  }
+
+  getAnchorMarkers() {
+    return this.structure.getAnchorMarkers();
+  }
+
+  getAnchorWorldPosition(id) {
+    return this.structure.getAnchorWorldPosition(id);
+  }
+
+  setStructureHelpersVisible(enabled) {
+    this.structure.setSelectionHelperVisible(enabled);
+  }
+
+  dispose() {
+    this.disposeCurrent();
+    this.variants.detach();
+    this.#disposeVariantMaterials();
+    this.structure.dispose();
+    Object.values(this.overrideMaterialVariants).forEach((variants) => {
+      Object.values(variants).forEach((material) => material.dispose());
+    });
   }
 
   setShadowsEnabled(enabled) {
@@ -363,5 +879,9 @@ export class ProductSession {
 
   hasTransformTween() {
     return Boolean(this.transformTween);
+  }
+
+  isDynamic() {
+    return Boolean(this.transformTween || this.explosion.isDynamic());
   }
 }

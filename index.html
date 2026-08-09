@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#070809" />
-  <meta name="description" content="Product VIS — drop a GLB and create a premium realtime product render directly in the browser." />
-  <meta name="product-vis-build" content="v1.1-foundation" />
-  <title>Product VIS — Realtime Product Renderer</title>
+  <meta name="description" content="Product VIS — author premium realtime product experiences, guided stories, branded presentation players and controlled AR handoffs directly in the browser." />
+  <meta name="product-vis-build" content="v2-branded-presentation-mode" />
+  <title>Product VIS V2 — Branded Realtime Product Experiences</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/src/styles.css" />
 
@@ -30,14 +30,43 @@
       </div>
 
       <div class="top-actions">
-        <button id="helpButton" class="icon-button subtle-button" type="button" aria-label="Open help" title="Help">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.7 9.2a2.5 2.5 0 0 1 2.5-2c1.7 0 2.9 1 2.9 2.5 0 1.3-.7 2-1.8 2.7-.9.6-1.3 1.1-1.3 2.1"/><path d="M12 17.4h.01"/></svg>
+        <button id="presentButton" class="text-button present-button" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H4z"/><path d="M8 20h8M12 16v4"/><path d="m10 9 5 2.5-5 2.5V9Z"/></svg>
+          <span>Present</span>
         </button>
-
-        <button id="resetButton" class="text-button subtle-button top-desktop-action" type="button">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 8.2V4.5h3.7"/><path d="M5 5a8.5 8.5 0 1 1-1.1 10.2"/></svg>
-          <span>Reset</span>
-        </button>
+        <div class="project-wrap">
+          <button id="projectButton" class="text-button project-button" type="button" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h6l2 2h7v11h-15v-13Z"/><path d="M4.5 9h15"/></svg>
+            <span>Project</span>
+            <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+          </button>
+          <div id="projectMenu" class="popover project-menu" hidden>
+            <div class="project-menu-head">
+              <span>LOCAL PROJECT</span><small id="projectStateLabel">DEMO · UNSAVED</small>
+            </div>
+            <button id="saveProjectButton" class="project-menu-item" type="button">
+              <span><b>Save project</b><small>.productvis + embedded GLB</small></span><kbd>⌘S</kbd>
+            </button>
+            <button id="openProjectButton" class="project-menu-item" type="button">
+              <span><b>Open project</b><small>Restore asset, shot and controls</small></span><kbd>⌘O</kbd>
+            </button>
+            <button id="openExperienceButton" class="project-menu-item" type="button">
+              <span><b>Open experience</b><small>Launch a read-only .productvis-show package</small></span><kbd>SHOW</kbd>
+            </button>
+            <button id="publishExperienceButton" class="project-menu-item" type="button">
+              <span><b>Publish experience</b><small>Package the current GLB and branded player</small></span><kbd>V2</kbd>
+            </button>
+            <input id="projectFileInput" type="file" accept=".productvis,application/x-productvis" hidden />
+            <input id="experienceFileInput" type="file" accept=".productvis-show,application/x-productvis-show" hidden />
+            <div class="project-menu-section">
+              <div class="project-menu-section-head"><span>RECENT LOCAL</span><small>UP TO 3</small></div>
+              <div id="recentProjectsList" class="recent-projects-list">
+                <p id="recentProjectsEmpty" class="project-empty">Saved projects on this device appear here.</p>
+              </div>
+            </div>
+            <p class="project-menu-note">Projects stay on this device. Saving downloads a portable file with the original GLB embedded.</p>
+          </div>
+        </div>
 
         <label class="text-button import-button" for="fileInput">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M5 13v5.5h14V13"/></svg>
@@ -52,6 +81,14 @@
             <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
           </button>
           <div id="exportMenu" class="popover export-menu" role="menu" hidden>
+            <div class="export-framing-control" role="group" aria-label="Export framing">
+              <span>FRAMING</span>
+              <div class="segmented">
+                <button class="is-active" type="button" data-export-framing="match">Match</button>
+                <button type="button" data-export-framing="fill">Fill</button>
+              </div>
+              <small id="exportFramingNote">Preserve the complete viewport composition.</small>
+            </div>
             <button type="button" role="menuitem" data-export="viewport">
               <span>Viewport</span><small id="viewportExportSize">—</small>
             </button>
@@ -64,22 +101,99 @@
             <button type="button" role="menuitem" data-export="2160x2700">
               <span>Portrait</span><small>2160 × 2700</small>
             </button>
+            <div class="export-menu-section-label">BRANDED PRESENTATION</div>
+            <button type="button" role="menuitem" data-export-presentation="viewport">
+              <span>Presentation viewport</span><small>Brand + active graphics</small>
+            </button>
+            <button type="button" role="menuitem" data-export-presentation="1920x1080">
+              <span>Presentation landscape</span><small>1920 × 1080</small>
+            </button>
+            <button type="button" role="menuitem" data-export-presentation="2160x2700">
+              <span>Presentation portrait</span><small>2160 × 2700</small>
+            </button>
           </div>
         </div>
       </div>
     </header>
 
-    <main id="viewportShell" class="viewport-shell">
-      <div class="fallback-visual" aria-hidden="true">
-        <div class="fallback-glow"></div>
-      </div>
+    <main id="viewportShell" class="viewport-shell" data-overlay-theme="dark">
+      <div class="fallback-visual" aria-hidden="true"></div>
       <canvas id="viewport" aria-label="Interactive 3D product viewport"></canvas>
+      <div id="anchorOverlay" class="anchor-overlay" aria-hidden="true"></div>
+      <div id="infographicOverlay" class="infographic-overlay" aria-hidden="true"></div>
+      <div id="storyTransport" class="story-transport" hidden aria-live="polite">
+        <div class="story-transport-copy">
+          <small>PRODUCT STORY</small>
+          <strong id="storyTransportName">No active story</strong>
+          <span id="storyTransportStatus">IDLE</span>
+        </div>
+        <div class="story-transport-actions">
+          <button id="storyTransportPreviousButton" type="button" aria-label="Previous story step">←</button>
+          <button id="storyTransportPlayButton" type="button" aria-label="Play or pause story">Play</button>
+          <button id="storyTransportNextButton" type="button" aria-label="Next story step">→</button>
+          <button id="storyTransportStopButton" type="button" aria-label="Stop story">Stop</button>
+        </div>
+      </div>
+
+      <section id="presentationShell" class="presentation-shell" hidden aria-label="Branded product presentation">
+        <header class="presentation-header">
+          <div class="presentation-brand">
+            <img id="presentationBrandLogo" alt="" hidden />
+            <span id="presentationBrandMark" class="presentation-brand-mark">P</span>
+            <div><small id="presentationBrandEyebrow">PRODUCT VIS</small><strong id="presentationBrandTitle">Product Experience</strong></div>
+          </div>
+          <div class="presentation-actions">
+            <button id="presentationOptionsButton" type="button" aria-label="Toggle product options">Options</button>
+            <button id="presentationShareButton" type="button" aria-label="Share experience">Share</button>
+            <button id="presentationArButton" type="button" aria-label="View product in augmented reality">View in AR</button>
+            <button id="presentationFullscreenButton" type="button" aria-label="Toggle presentation fullscreen">Fullscreen</button>
+            <button id="presentationExitButton" type="button" aria-label="Exit presentation">Exit</button>
+          </div>
+        </header>
+
+        <div id="presentationIntro" class="presentation-gate presentation-intro">
+          <div class="presentation-gate-card">
+            <img id="presentationIntroLogo" alt="" hidden />
+            <small id="presentationIntroEyebrow">PRODUCT VIS</small>
+            <h1 id="presentationIntroTitle">Meet the product.</h1>
+            <p id="presentationIntroBody">A guided realtime product experience.</p>
+            <button id="presentationStartButton" type="button">Start experience</button>
+          </div>
+        </div>
+
+        <nav id="presentationNavigation" class="presentation-navigation" aria-label="Product story navigation">
+          <div class="presentation-story-copy">
+            <small id="presentationStoryName">PRODUCT STORY</small>
+            <strong id="presentationStepName">Explore freely</strong>
+            <span id="presentationStepMeta">READY</span>
+          </div>
+          <div id="presentationStepDots" class="presentation-step-dots" aria-label="Story steps"></div>
+          <div class="presentation-transport">
+            <button id="presentationPreviousButton" type="button" aria-label="Previous step">←</button>
+            <button id="presentationPlayButton" type="button" aria-label="Play or pause story">Play</button>
+            <button id="presentationNextButton" type="button" aria-label="Next step">→</button>
+          </div>
+        </nav>
+
+        <div id="presentationOutro" class="presentation-gate presentation-outro" hidden>
+          <div class="presentation-gate-card">
+            <small>EXPERIENCE COMPLETE</small>
+            <h2 id="presentationOutroTitle">Ready for the next step?</h2>
+            <p id="presentationOutroBody">Restart the story or continue to the product page.</p>
+            <div class="presentation-outro-actions">
+              <button id="presentationRestartButton" type="button">Restart story</button>
+              <a id="presentationOutroLink" href="#" target="_blank" rel="noopener" hidden>Learn more</a>
+              <button id="presentationExploreButton" type="button">Explore freely</button>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <div id="dropOverlay" class="drop-overlay" aria-hidden="true">
         <div class="drop-target">
           <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 31V10"/><path d="m16 18 8-8 8 8"/><path d="M9 28v10h30V28"/></svg>
-          <strong>Drop your GLB</strong>
-          <span>Rendered locally. Nothing is uploaded.</span>
+          <strong>Drop a GLB, .productvis or .productvis-show</strong>
+          <span>Rendered and restored locally. Nothing is uploaded.</span>
         </div>
       </div>
 
@@ -94,28 +208,25 @@
         </div>
       </div>
 
-      <nav class="scene-rail" aria-label="Lighting presets">
-        <span class="rail-title">ENV</span>
-        <button class="scene-preset is-active" type="button" data-preset="studio" aria-pressed="true">
-          <span class="preset-swatch swatch-studio"></span><span>Studio</span>
-        </button>
-        <button class="scene-preset" type="button" data-preset="soft" aria-pressed="false">
-          <span class="preset-swatch swatch-soft"></span><span>Soft</span>
-        </button>
-        <button class="scene-preset" type="button" data-preset="noir" aria-pressed="false">
-          <span class="preset-swatch swatch-noir"></span><span>Noir</span>
-        </button>
-        <button class="scene-preset" type="button" data-preset="gallery" aria-pressed="false">
-          <span class="preset-swatch swatch-gallery"></span><span>Gallery</span>
-        </button>
-        <button class="scene-preset" type="button" data-preset="sunset" aria-pressed="false">
-          <span class="preset-swatch swatch-sunset"></span><span>Sunset</span>
-        </button>
-      </nav>
+      <div id="recoveryPrompt" class="recovery-prompt" hidden>
+        <div class="recovery-prompt-card">
+          <div>
+            <small>LOCAL RECOVERY DRAFT</small>
+            <strong id="recoveryPromptTitle">Unsaved Product VIS session</strong>
+            <p id="recoveryPromptMeta">A newer local draft is available on this device.</p>
+          </div>
+          <div class="recovery-prompt-actions">
+            <button id="dismissRecoveryButton" type="button">Dismiss</button>
+            <button id="restoreRecoveryButton" type="button">Restore draft</button>
+          </div>
+        </div>
+      </div>
 
       <div class="viewport-hud viewport-hud-left">
         <span id="renderModeBadge" class="hud-chip"><i></i> QUALITY</span>
         <span id="statsBadge" class="hud-text">14K TRIS · 5 MATS</span>
+        <span id="preflightHudBadge" class="hud-text preflight-hud-badge" data-status="ready">READY 100</span>
+        <span id="runtimeHudBadge" class="hud-text runtime-hud-badge">WARMING</span>
       </div>
 
       <div class="viewport-hud viewport-hud-right">
@@ -127,34 +238,82 @@
       <div id="introHint" class="intro-hint">
         <div class="intro-kicker"><span></span> LOCAL REALTIME RENDER</div>
         <h1>Drop a product.<br />Get the shot.</h1>
-        <p>Drag a GLB anywhere, then shape the look with studio presets, materials and camera angles.</p>
+        <p>Import a GLB, shape the shot, save a portable project, then export the exact composition.</p>
         <label class="inline-import" for="fileInput">Choose a GLB <span>↗</span></label>
         <button id="dismissIntro" type="button" aria-label="Dismiss intro">×</button>
       </div>
 
-      <div class="camera-dock" aria-label="Camera presets">
-        <span class="dock-label">CAM</span>
-        <button class="camera-preset is-active" type="button" data-camera="hero">Hero</button>
-        <button class="camera-preset" type="button" data-camera="front">Front</button>
-        <button class="camera-preset" type="button" data-camera="side">Side</button>
-        <button class="camera-preset" type="button" data-camera="top">Top</button>
-        <button class="camera-preset" type="button" data-camera="detail">Detail</button>
-        <span class="dock-separator"></span>
-        <button id="fitButton" class="dock-icon" type="button" aria-label="Fit model" title="Fit model">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v4"/><path d="M16 4h4v4"/><path d="M8 20H4v-4"/><path d="M16 20h4v-4"/><rect x="8" y="8" width="8" height="8"/></svg>
-        </button>
-      </div>
 
-      <button id="panelToggle" class="panel-toggle" type="button" aria-label="Toggle controls" aria-expanded="true">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/><circle cx="9" cy="7" r="1.8"/><circle cx="15" cy="12" r="1.8"/><circle cx="11" cy="17" r="1.8"/></svg>
-        <span>Controls</span>
-      </button>
+      <section id="variantTray" class="variant-tray" aria-label="Product options" hidden>
+        <div class="variant-tray-head">
+          <span>PRODUCT OPTIONS</span>
+          <small id="variantTrayMeta">0 GROUPS</small>
+        </div>
+        <div id="variantTrayGroups" class="variant-tray-groups"></div>
+      </section>
+
+      <div id="quickDock" class="quick-dock" aria-label="Quick render controls">
+        <div class="quick-group quick-group-background" role="group" aria-label="Background">
+          <span class="quick-label">BG</span>
+          <div class="quick-options">
+            <button class="quick-button backdrop-preset" type="button" data-backdrop="white" aria-label="White background" aria-pressed="false">
+              <span class="quick-swatch swatch-white"></span><span>White</span>
+            </button>
+            <button class="quick-button backdrop-preset is-active" type="button" data-backdrop="gray" aria-label="Gray background" aria-pressed="true">
+              <span class="quick-swatch swatch-gray"></span><span>Gray</span>
+            </button>
+            <button class="quick-button backdrop-preset" type="button" data-backdrop="black" aria-label="Black background" aria-pressed="false">
+              <span class="quick-swatch swatch-black"></span><span>Black</span>
+            </button>
+          </div>
+        </div>
+
+        <span class="quick-divider" aria-hidden="true"></span>
+
+        <div class="quick-group quick-group-light" role="group" aria-label="Lighting">
+          <span class="quick-label">LIGHT</span>
+          <div class="quick-options">
+            <button class="quick-button lighting-preset" type="button" data-lighting="soft" aria-pressed="false"><span class="light-glyph light-soft"></span><span>Soft</span></button>
+            <button class="quick-button lighting-preset is-active" type="button" data-lighting="balanced" aria-pressed="true"><span class="light-glyph light-balanced"></span><span>Balanced</span></button>
+            <button class="quick-button lighting-preset" type="button" data-lighting="contrast" aria-pressed="false"><span class="light-glyph light-contrast"></span><span>Contrast</span></button>
+          </div>
+        </div>
+
+        <span class="quick-divider" aria-hidden="true"></span>
+
+        <div class="quick-group quick-group-camera" role="group" aria-label="Camera presets">
+          <span class="quick-label">CAM</span>
+          <div class="quick-options">
+            <button class="quick-button camera-preset is-active" type="button" data-camera="hero">Hero</button>
+            <button class="quick-button camera-preset" type="button" data-camera="front">Front</button>
+            <button class="quick-button camera-preset" type="button" data-camera="side">Side</button>
+            <button class="quick-button camera-preset" type="button" data-camera="top">Top</button>
+            <button class="quick-button camera-preset" type="button" data-camera="detail">Detail</button>
+            <button id="fitButton" class="quick-icon-button" type="button" aria-label="Fit product" title="Fit product">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v4"/><path d="M16 4h4v4"/><path d="M8 20H4v-4"/><path d="M16 20h4v-4"/><rect x="8" y="8" width="8" height="8"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <span class="quick-divider" aria-hidden="true"></span>
+
+        <div class="quick-actions">
+          <button id="quickTurntableButton" class="quick-action" type="button" aria-label="Toggle turntable" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 8.5A8 8 0 0 1 19 7"/><path d="m19 3 .2 4.4-4.4.2"/><path d="M18.5 15.5A8 8 0 0 1 5 17"/><path d="m5 21-.2-4.4 4.4-.2"/></svg>
+            <span>Turntable</span>
+          </button>
+          <button id="panelToggle" class="quick-action advanced-action" type="button" aria-label="Toggle advanced controls" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/><circle cx="9" cy="7" r="1.8"/><circle cx="15" cy="12" r="1.8"/><circle cx="11" cy="17" r="1.8"/></svg>
+            <span>Advanced</span>
+          </button>
+        </div>
+      </div>
 
       <aside id="controlPanel" class="control-panel" aria-label="Product render controls">
         <div class="panel-handle" aria-hidden="true"></div>
         <div class="panel-header">
           <div>
-            <small>RENDER CONTROL</small>
+            <small>ADVANCED CONTROL</small>
             <strong id="panelTitle">Look</strong>
           </div>
           <button id="panelClose" class="panel-close" type="button" aria-label="Close controls">×</button>
@@ -165,57 +324,110 @@
           <button class="panel-tab" type="button" role="tab" aria-selected="false" data-panel="object">Object</button>
           <button class="panel-tab" type="button" role="tab" aria-selected="false" data-panel="camera">Camera</button>
           <button class="panel-tab" type="button" role="tab" aria-selected="false" data-panel="motion">Motion</button>
+          <button class="panel-tab" type="button" role="tab" aria-selected="false" data-panel="structure">Parts</button>
+          <button class="panel-tab" type="button" role="tab" aria-selected="false" data-panel="variants">Variants</button>
+          <button class="panel-tab" type="button" role="tab" aria-selected="false" data-panel="info">Info</button>
+          <button class="panel-tab" type="button" role="tab" aria-selected="false" data-panel="stories">Stories</button>
+          <button class="panel-tab" type="button" role="tab" aria-selected="false" data-panel="publish">Publish</button>
+          <button class="panel-tab" type="button" role="tab" aria-selected="false" data-panel="health">Health</button>
         </div>
 
         <div class="panel-scroll">
           <section class="panel-page is-active" data-panel-page="look" role="tabpanel">
-            <div class="control-group">
+            <div class="group-toolbar">
+              <span class="group-state"><i></i><b id="lookGroupStatus">GRAY · BALANCED</b></span>
+              <button id="resetLookGroupButton" class="group-reset" type="button">Reset Look</button>
+            </div>
+
+            <div class="control-group saved-look-card">
+              <div class="control-heading"><span>Saved looks</span><small id="savedLookCount">0 SAVED</small></div>
+              <div class="saved-look-form">
+                <input id="savedLookNameInput" type="text" maxlength="80" placeholder="Look name" aria-label="Saved look name" />
+                <button id="saveLookButton" type="button">Save current</button>
+              </div>
+              <select id="savedLookSelect" aria-label="Saved look" disabled>
+                <option value="">No saved looks</option>
+              </select>
+              <div class="saved-look-actions">
+                <button id="applyLookButton" type="button" disabled>Apply</button>
+                <button id="deleteLookButton" type="button" disabled>Delete</button>
+              </div>
+              <p>Saved locally and embedded into future .productvis files.</p>
+            </div>
+
+            <div class="control-group backdrop-control-group">
               <div class="control-heading">
-                <span>Material treatment</span>
-                <small id="materialModeValue">ORIGINAL</small>
+                <span>Backdrop</span>
+                <small id="backdropChannelState">GRAY</small>
               </div>
-              <div class="segmented material-segmented">
-                <button class="is-active" type="button" data-material="original">Original</button>
-                <button type="button" data-material="clay">Clay</button>
-                <button type="button" data-material="chrome">Chrome</button>
-                <button type="button" data-material="matte">Matte</button>
-              </div>
+              <label class="range-control backdrop-tone-control">
+                <span><b>Black → White</b><output id="backdropToneOutput">48%</output></span>
+                <input id="backdropToneInput" type="range" min="0.015" max="0.985" step="0.005" value="0.48" aria-label="Backdrop tone from black to white" />
+              </label>
             </div>
 
             <div class="control-group slider-stack">
+              <div class="control-heading">
+                <span>Lighting</span>
+                <small id="lightingChannelState">BALANCED</small>
+              </div>
               <label class="range-control">
-                <span><b>Exposure</b><output id="exposureOutput">1.05</output></span>
-                <input id="exposureInput" type="range" min="0.45" max="1.8" step="0.01" value="1.05" />
+                <span><b>Exposure</b><output id="exposureOutput">0.98</output></span>
+                <input id="exposureInput" type="range" min="0.55" max="1.45" step="0.01" value="0.98" />
               </label>
               <label class="range-control">
-                <span><b>Environment</b><output id="environmentOutput">1.25</output></span>
-                <input id="environmentInput" type="range" min="0" max="3" step="0.01" value="1.25" />
+                <span><b>Environment light</b><output id="environmentOutput">1.18</output></span>
+                <input id="environmentInput" type="range" min="0" max="2.5" step="0.01" value="1.18" />
               </label>
               <label class="range-control">
-                <span><b>Key light</b><output id="keyOutput">3.40</output></span>
-                <input id="keyInput" type="range" min="0" max="8" step="0.05" value="3.4" />
+                <span><b>Environment rotation</b><output id="environmentRotationOutput">14°</output></span>
+                <input id="environmentRotationInput" type="range" min="-180" max="180" step="1" value="14" />
               </label>
               <label class="range-control">
-                <span><b>Rim light</b><output id="rimOutput">5.00</output></span>
-                <input id="rimInput" type="range" min="0" max="10" step="0.05" value="5" />
+                <span><b>Key light</b><output id="keyOutput">2.35</output></span>
+                <input id="keyInput" type="range" min="0" max="6" step="0.05" value="2.35" />
               </label>
               <label class="range-control">
-                <span><b>Bloom</b><output id="bloomOutput">0.18</output></span>
-                <input id="bloomInput" type="range" min="0" max="1.2" step="0.01" value="0.18" />
+                <span><b>Fill light</b><output id="fillOutput">0.78</output></span>
+                <input id="fillInput" type="range" min="0" max="4" step="0.05" value="0.78" />
+              </label>
+              <label class="range-control">
+                <span><b>Rim light</b><output id="rimOutput">1.80</output></span>
+                <input id="rimInput" type="range" min="0" max="6" step="0.05" value="1.8" />
+              </label>
+              <label class="range-control">
+                <span><b>Bloom</b><output id="bloomOutput">0.00</output></span>
+                <input id="bloomInput" type="range" min="0" max="0.45" step="0.01" value="0" />
+              </label>
+            </div>
+
+            <div class="control-group slider-stack">
+              <div class="control-heading"><span>Ground & shadow</span><small>Y=0 CONTRACT</small></div>
+              <label class="range-control">
+                <span><b>Ground offset</b><output id="groundOffsetOutput">0.00</output></span>
+                <input id="groundOffsetInput" type="range" min="-0.5" max="0.5" step="0.01" value="0" />
+              </label>
+              <label class="range-control">
+                <span><b>Shadow opacity</b><output id="shadowOpacityOutput">0.52</output></span>
+                <input id="shadowOpacityInput" type="range" min="0" max="1" step="0.01" value="0.52" />
+              </label>
+              <label class="range-control">
+                <span><b>Shadow softness</b><output id="shadowSoftnessOutput">0.58</output></span>
+                <input id="shadowSoftnessInput" type="range" min="0.05" max="1" step="0.01" value="0.58" />
               </label>
             </div>
 
             <div class="control-group toggle-list">
               <label class="toggle-row">
-                <span><b>Studio floor</b><small>Ground plane and contact shadow</small></span>
+                <span><b>Grounding</b><small>Show the invisible ground contract</small></span>
                 <input id="floorToggle" type="checkbox" checked /><i></i>
               </label>
               <label class="toggle-row">
-                <span><b>Cast shadows</b><small>Realtime soft shadow map</small></span>
+                <span><b>Contact shadow</b><small>Geometry-aware and cached</small></span>
                 <input id="shadowToggle" type="checkbox" checked /><i></i>
               </label>
               <label class="toggle-row">
-                <span><b>Post-processing</b><small>Tone mapping and bloom</small></span>
+                <span><b>Post-processing</b><small>Tone mapping and optional bloom</small></span>
                 <input id="postToggle" type="checkbox" checked /><i></i>
               </label>
             </div>
@@ -231,11 +443,16 @@
           </section>
 
           <section class="panel-page" data-panel-page="object" role="tabpanel" hidden>
+            <div class="group-toolbar">
+              <span class="group-state"><i></i><b id="objectGroupStatus">DEFAULT</b></span>
+              <button id="resetObjectGroupButton" class="group-reset" type="button">Reset Object</button>
+            </div>
+
             <div class="control-group action-grid">
               <button id="centerButton" type="button"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="4"/></svg><span>Center</span></button>
               <button id="groundButton" type="button"><svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M12 5v10"/><path d="m8 11 4 4 4-4"/></svg><span>Ground</span></button>
               <button id="objectFitButton" type="button"><svg viewBox="0 0 24 24"><path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4"/><rect x="8" y="8" width="8" height="8"/></svg><span>Fit</span></button>
-              <button id="resetTransformButton" type="button"><svg viewBox="0 0 24 24"><path d="M5 7V3h4"/><path d="M5.6 4.2A8 8 0 1 1 4 14"/></svg><span>Reset</span></button>
+              <button id="resetTransformButton" type="button"><svg viewBox="0 0 24 24"><path d="M5 7V3h4"/><path d="M5.6 4.2A8 8 0 1 1 4 14"/></svg><span>Transform</span></button>
             </div>
 
             <div class="control-group">
@@ -258,6 +475,42 @@
               </label>
             </div>
 
+            <div class="control-group">
+              <div class="control-heading">
+                <span>Material treatment</span>
+                <small id="materialModeValue">ORIGINAL</small>
+              </div>
+              <div class="segmented material-segmented">
+                <button class="is-active" type="button" data-material="original">Original</button>
+                <button type="button" data-material="clay">Clay</button>
+                <button type="button" data-material="chrome">Chrome</button>
+                <button type="button" data-material="matte">Matte</button>
+              </div>
+            </div>
+
+            <div class="control-group diagnostics-card">
+              <div class="control-heading"><span>Material diagnostics</span><small id="materialHealth">SAFE</small></div>
+              <dl class="diagnostic-grid">
+                <div><dt>Transparent</dt><dd id="diagTransparent">0</dd></div>
+                <div><dt>Alpha mask</dt><dd id="diagAlphaMasked">0</dd></div>
+                <div><dt>Glass</dt><dd id="diagGlass">0</dd></div>
+                <div><dt>Double-sided</dt><dd id="diagDoubleSided">0</dd></div>
+                <div><dt>Repair candidates</dt><dd id="diagBackfaceCandidates">0</dd></div>
+              </dl>
+              <label class="toggle-row diagnostics-toggle-row">
+                <span><b>Auto-repair safe candidates</b><small>Never blanket-applies to glass</small></span>
+                <input id="backfaceRepairToggle" type="checkbox" /><i></i>
+              </label>
+              <p id="diagNotes" class="diagnostic-note">Opaque materials remain unchanged. Glass is reported but not forced double-sided.</p>
+            </div>
+
+            <div class="control-group material-list-card">
+              <div class="control-heading"><span>Material side policy</span><small id="materialListMeta">0 MATERIALS</small></div>
+              <div id="materialDiagnosticsList" class="material-diagnostics-list" aria-live="polite">
+                <p class="material-list-empty">Import a GLB to inspect material-side policies.</p>
+              </div>
+            </div>
+
             <div class="control-group model-info-card">
               <div class="control-heading"><span>Model report</span><small>LOCAL</small></div>
               <dl>
@@ -272,17 +525,36 @@
           </section>
 
           <section class="panel-page" data-panel-page="camera" role="tabpanel" hidden>
-            <div class="control-group camera-card-grid">
+            <div class="group-toolbar">
+              <span class="group-state"><i></i><b id="cameraGroupStatus">HERO</b></span>
+              <button id="resetCameraGroupButton" class="group-reset" type="button">Reset Camera</button>
+            </div>
+
+            <div class="control-group camera-card-grid camera-card-grid-five">
               <button class="camera-card is-active" type="button" data-camera="hero"><span class="camera-diagram camera-hero"></span><b>Hero</b><small>3/4 product view</small></button>
               <button class="camera-card" type="button" data-camera="front"><span class="camera-diagram camera-front"></span><b>Front</b><small>Centered elevation</small></button>
               <button class="camera-card" type="button" data-camera="side"><span class="camera-diagram camera-side"></span><b>Side</b><small>Profile view</small></button>
               <button class="camera-card" type="button" data-camera="top"><span class="camera-diagram camera-top"></span><b>Top</b><small>High angle</small></button>
+              <button class="camera-card" type="button" data-camera="detail"><span class="camera-diagram camera-detail"></span><b>Detail</b><small>Close product view</small></button>
             </div>
 
             <div class="control-group slider-stack">
+              <div class="control-heading"><span>Lens & target</span><small>NORMALIZED</small></div>
               <label class="range-control">
                 <span><b>Focal length</b><output id="focalOutput">50 mm</output></span>
                 <input id="focalInput" type="range" min="24" max="100" step="1" value="50" />
+              </label>
+              <label class="range-control">
+                <span><b>Target X</b><output id="targetXOutput">0.00</output></span>
+                <input id="targetXInput" type="range" min="-1" max="1" step="0.01" value="0" />
+              </label>
+              <label class="range-control">
+                <span><b>Target height</b><output id="targetYOutput">0.47</output></span>
+                <input id="targetYInput" type="range" min="0" max="1" step="0.01" value="0.47" />
+              </label>
+              <label class="range-control">
+                <span><b>Target Z</b><output id="targetZOutput">0.00</output></span>
+                <input id="targetZInput" type="range" min="-1" max="1" step="0.01" value="0" />
               </label>
               <label class="range-control">
                 <span><b>Orbit damping</b><output id="dampingOutput">0.08</output></span>
@@ -292,21 +564,39 @@
 
             <div class="control-group toggle-list">
               <label class="toggle-row">
-                <span><b>Auto orbit</b><small>Slow presentation turntable</small></span>
+                <span><b>Auto orbit</b><small>Slow presentation camera orbit</small></span>
                 <input id="autoRotateToggle" type="checkbox" /><i></i>
               </label>
               <label class="toggle-row">
                 <span><b>Lock horizon</b><small>Prevents upside-down orbiting</small></span>
                 <input id="horizonToggle" type="checkbox" checked /><i></i>
               </label>
+              <label class="toggle-row">
+                <span><b>Inspect mode</b><small>Relax safety limits for close review</small></span>
+                <input id="inspectToggle" type="checkbox" /><i></i>
+              </label>
+            </div>
+
+            <div class="control-group diagnostics-card camera-diagnostics-card">
+              <div class="control-heading"><span>Camera safety</span><small id="cameraModeValue">PRESENTATION</small></div>
+              <dl class="diagnostic-grid diagnostic-grid-compact">
+                <div><dt>Min distance</dt><dd id="cameraMinDistance">0.00</dd></div>
+                <div><dt>Near / far</dt><dd id="cameraNearValue">0.000 / 0</dd></div>
+              </dl>
+              <p id="cameraSafetyNote" class="diagnostic-note">Presentation mode keeps the orbit clean and above ground.</p>
             </div>
 
             <div class="control-group">
-              <button id="cameraResetButton" class="wide-action" type="button">Reset camera to hero</button>
+              <button id="cameraResetButton" class="wide-action" type="button">Return to Hero pose</button>
             </div>
           </section>
 
           <section class="panel-page" data-panel-page="motion" role="tabpanel" hidden>
+            <div class="group-toolbar">
+              <span class="group-state"><i></i><b id="motionGroupStatus">IDLE</b></span>
+              <button id="resetMotionGroupButton" class="group-reset" type="button">Reset Motion</button>
+            </div>
+
             <div class="control-group motion-player">
               <div class="control-heading"><span>Embedded animation</span><small id="animationCount">0 CLIPS</small></div>
               <select id="animationSelect" aria-label="Animation clip" disabled>
@@ -346,11 +636,572 @@
               <p>Camera sequences, exploded views, hotspot infographics and branded configurator states can plug into this motion layer.</p>
             </div>
           </section>
+
+
+          <section class="panel-page" data-panel-page="structure" role="tabpanel" hidden>
+            <div class="group-toolbar">
+              <span class="group-state"><i></i><b id="structureGroupStatus">DEFAULT</b></span>
+              <button id="resetStructureGroupButton" class="group-reset" type="button">Reset Parts</button>
+            </div>
+
+            <div class="control-group structure-browser-card">
+              <div class="control-heading"><span>Product structure</span><small id="structureMeta">0 PARTS</small></div>
+              <input id="structureSearchInput" class="structure-search" type="search" maxlength="80" placeholder="Search parts" aria-label="Search product parts" />
+              <div class="structure-global-actions">
+                <button id="showAllPartsButton" type="button">Show all</button>
+                <button id="restoreAuthoredVisibilityButton" type="button">Authored</button>
+                <button id="isolateSelectedPartButton" type="button" disabled>Isolate</button>
+              </div>
+              <div id="structurePartList" class="structure-part-list" role="listbox" aria-label="Product parts">
+                <p class="structure-empty">Import a GLB to inspect its product structure.</p>
+              </div>
+            </div>
+
+            <div class="control-group structure-selection-card">
+              <div class="control-heading"><span>Selected part</span><small id="selectedPartKind">NONE</small></div>
+              <strong id="selectedPartName" class="selected-part-name">No part selected</strong>
+              <p id="selectedPartPath" class="diagnostic-note">Select a mesh or group from the structure list.</p>
+              <div class="structure-selection-actions">
+                <button id="toggleSelectedPartButton" type="button" disabled>Hide part</button>
+                <button id="anchorSelectedPartButton" type="button" disabled>Create anchor</button>
+              </div>
+            </div>
+
+            <div class="control-group structure-state-card">
+              <div class="control-heading"><span>Visibility states</span><small id="visibilityStateCount">0 SAVED</small></div>
+              <div class="saved-look-form">
+                <input id="visibilityStateNameInput" type="text" maxlength="80" placeholder="State name" aria-label="Visibility state name" />
+                <button id="saveVisibilityStateButton" type="button">Save current</button>
+              </div>
+              <select id="visibilityStateSelect" aria-label="Visibility state" disabled>
+                <option value="">No saved states</option>
+              </select>
+              <div class="saved-look-actions">
+                <button id="applyVisibilityStateButton" type="button" disabled>Apply</button>
+                <button id="deleteVisibilityStateButton" type="button" disabled>Delete</button>
+              </div>
+            </div>
+
+            <div class="control-group anchor-authoring-card">
+              <div class="control-heading"><span>Product anchors</span><small id="anchorCount">0 ANCHORS</small></div>
+              <div class="segmented anchor-display-segmented" role="group" aria-label="Anchor display">
+                <button class="is-active" type="button" data-anchor-display="off">Off</button>
+                <button type="button" data-anchor-display="selected">Selected</button>
+                <button type="button" data-anchor-display="all">All</button>
+              </div>
+              <div class="saved-look-form">
+                <input id="anchorNameInput" type="text" maxlength="80" placeholder="Anchor name" aria-label="Anchor name" />
+                <button id="createTargetAnchorButton" type="button">From camera</button>
+              </div>
+              <select id="anchorSelect" aria-label="Product anchor" disabled>
+                <option value="">No anchors</option>
+              </select>
+              <div class="saved-look-actions anchor-actions">
+                <button id="focusAnchorButton" type="button" disabled>Focus</button>
+                <button id="deleteAnchorButton" type="button" disabled>Delete</button>
+              </div>
+              <p id="anchorMeta" class="diagnostic-note">Anchors are stored in product-local space and follow the model.</p>
+            </div>
+
+            <div class="control-group roadmap-card">
+              <small>V2 FOUNDATION</small>
+              <strong>Stable parts feed live variants</strong>
+              <p>Part IDs, visibility states and anchors now feed V1.8 option groups without changing the renderer or export contracts.</p>
+            </div>
+          </section>
+
+          <section class="panel-page" data-panel-page="variants" role="tabpanel" hidden>
+            <div class="group-toolbar">
+              <span class="group-state"><i></i><b id="variantGroupStatus">EMPTY</b></span>
+              <button id="resetVariantGroupButton" class="group-reset" type="button">Reset Variants</button>
+            </div>
+
+            <div class="control-group variant-group-card">
+              <div class="control-heading"><span>Option groups</span><small id="variantGroupCount">0 GROUPS</small></div>
+              <div class="saved-look-form">
+                <input id="variantGroupNameInput" type="text" maxlength="80" placeholder="Group name, e.g. Body color" aria-label="Variant group name" />
+                <button id="createVariantGroupButton" type="button">Create group</button>
+              </div>
+              <select id="variantGroupSelect" aria-label="Variant group" disabled>
+                <option value="">No option groups</option>
+              </select>
+              <label class="toggle-row variant-required-row">
+                <span><b>Required selection</b><small>Always resolves to a default option</small></span>
+                <input id="variantGroupRequiredToggle" type="checkbox" checked disabled /><i></i>
+              </label>
+              <button id="deleteVariantGroupButton" class="wide-action variant-destructive-action" type="button" disabled>Delete selected group</button>
+            </div>
+
+            <div class="control-group variant-target-card">
+              <div class="control-heading"><span>Option target</span><small id="variantTargetKind">NO PART</small></div>
+              <strong id="variantTargetName" class="selected-part-name">Select a part in Parts</strong>
+              <p id="variantTargetMeta" class="diagnostic-note">Appearance changes expand safely to descendant meshes. Visibility changes target the selected stable part ID.</p>
+            </div>
+
+            <div class="control-group variant-option-authoring-card">
+              <div class="control-heading"><span>Create option</span><small>ONE ACTIVE PER GROUP</small></div>
+              <input id="variantOptionNameInput" type="text" maxlength="80" placeholder="Option name, e.g. Racing Red" aria-label="Variant option name" />
+              <label class="toggle-row variant-appearance-row">
+                <span><b>Appearance</b><small>Color and finish on the selected part</small></span>
+                <input id="variantAppearanceToggle" type="checkbox" checked /><i></i>
+              </label>
+              <div class="variant-appearance-controls">
+                <label class="variant-color-control"><span>Color</span><input id="variantColorInput" type="color" value="#ff7950" aria-label="Variant color" /></label>
+                <label><span>Finish</span>
+                  <select id="variantFinishSelect" aria-label="Variant finish">
+                    <option value="original">Original response</option>
+                    <option value="satin" selected>Satin</option>
+                    <option value="matte">Matte</option>
+                    <option value="gloss">Gloss</option>
+                    <option value="metallic">Metallic</option>
+                  </select>
+                </label>
+              </div>
+              <label class="variant-visibility-control"><span>Visibility</span>
+                <select id="variantVisibilitySelect" aria-label="Variant visibility change">
+                  <option value="unchanged">Keep current</option>
+                  <option value="show">Show target</option>
+                  <option value="hide">Hide target</option>
+                </select>
+              </label>
+              <button id="createVariantOptionButton" class="wide-action" type="button" disabled>Create and activate option</button>
+            </div>
+
+            <div class="control-group variant-options-card">
+              <div class="control-heading"><span>Group options</span><small id="variantOptionCount">0 OPTIONS</small></div>
+              <div id="variantOptionList" class="variant-option-list" aria-live="polite">
+                <p class="structure-empty">Create a group, select a part and add the first option.</p>
+              </div>
+            </div>
+
+            <div class="control-group variant-conflict-card" data-conflicts="false">
+              <div class="control-heading"><span>Deterministic resolution</span><small id="variantConflictCount">0 CONFLICTS</small></div>
+              <p id="variantConflictNote" class="diagnostic-note">Groups resolve from top to bottom. Later groups override only the properties they explicitly change.</p>
+              <div id="variantConflictList" class="variant-conflict-list"></div>
+            </div>
+
+            <div class="control-group variant-configuration-card">
+              <div class="control-heading"><span>Configurations</span><small id="variantConfigurationCount">0 SAVED</small></div>
+              <div class="saved-look-form">
+                <input id="variantConfigurationNameInput" type="text" maxlength="80" placeholder="Configuration name" aria-label="Configuration name" />
+                <button id="saveVariantConfigurationButton" type="button">Save current</button>
+              </div>
+              <select id="variantConfigurationSelect" aria-label="Saved product configuration" disabled>
+                <option value="">No configurations</option>
+              </select>
+              <div class="saved-look-actions">
+                <button id="applyVariantConfigurationButton" type="button" disabled>Apply</button>
+                <button id="deleteVariantConfigurationButton" type="button" disabled>Delete</button>
+              </div>
+            </div>
+
+            <div class="control-group toggle-list">
+              <label class="toggle-row">
+                <span><b>Viewport option tray</b><small>Expose active groups as a clean presentation control</small></span>
+                <input id="variantPreviewToggle" type="checkbox" /><i></i>
+              </label>
+            </div>
+
+            <div class="control-group roadmap-card">
+              <small>V1.8 CONTRACT</small>
+              <strong>Composable commercial options</strong>
+              <p>Independent groups combine part visibility and part-targeted appearance. The viewport tray applies the same versioned state used by saved configurations.</p>
+            </div>
+          </section>
+
+          <section class="panel-page" data-panel-page="info" role="tabpanel" hidden>
+            <div class="group-toolbar">
+              <span class="group-state"><i></i><b id="infoGroupStatus">EMPTY</b></span>
+              <button id="resetInfographicGroupButton" class="group-reset" type="button">Reset Info</button>
+            </div>
+
+            <div class="control-group infographic-display-card">
+              <div class="control-heading"><span>Viewport display</span><small id="infographicCount">0 INFOGRAPHICS</small></div>
+              <div class="segmented infographic-display-segmented">
+                <button class="is-active" type="button" data-infographic-display="off">Off</button>
+                <button type="button" data-infographic-display="selected">Selected</button>
+                <button type="button" data-infographic-display="all">All</button>
+              </div>
+              <p class="diagnostic-note">Cards remain screen-facing. Their vector connector paths are regenerated from product-local anchors every frame.</p>
+            </div>
+
+            <div class="control-group infographic-authoring-card">
+              <div class="control-heading"><span>Infographic card</span><small id="infographicUnresolvedCount">0 UNRESOLVED</small></div>
+              <label class="field-stack"><span>Product anchor</span>
+                <select id="infographicAnchorSelect" aria-label="Infographic product anchor" disabled>
+                  <option value="">Create an anchor in Parts</option>
+                </select>
+              </label>
+              <div class="infographic-copy-grid">
+                <label class="field-stack"><span>Eyebrow</span><input id="infographicEyebrowInput" type="text" maxlength="48" value="FEATURE" aria-label="Infographic eyebrow" /></label>
+                <label class="field-stack"><span>Title</span><input id="infographicTitleInput" type="text" maxlength="100" placeholder="Precision edge" aria-label="Infographic title" /></label>
+              </div>
+              <label class="field-stack"><span>Description</span><textarea id="infographicBodyInput" maxlength="900" rows="4" placeholder="Explain the benefit in one clear sentence." aria-label="Infographic description"></textarea></label>
+              <div class="infographic-style-grid">
+                <label class="variant-color-control"><span>Accent</span><input id="infographicAccentInput" type="color" value="#ff7950" aria-label="Infographic accent color" /></label>
+                <label class="field-stack"><span>Preferred side</span>
+                  <select id="infographicSideSelect" aria-label="Infographic preferred side">
+                    <option value="auto">Auto</option>
+                    <option value="left">Left</option>
+                    <option value="right">Right</option>
+                  </select>
+                </label>
+              </div>
+              <div class="saved-look-actions infographic-authoring-actions">
+                <button id="createInfographicButton" type="button" disabled>Create</button>
+                <button id="updateInfographicButton" type="button" disabled>Update selected</button>
+              </div>
+            </div>
+
+            <div class="control-group infographic-library-card">
+              <div class="control-heading"><span>Infographic library</span><small>LOCAL PROJECT STATE</small></div>
+              <select id="infographicSelect" aria-label="Infographic card" disabled>
+                <option value="">No infographics</option>
+              </select>
+              <label class="toggle-row">
+                <span><b>Visible</b><small>Keep this card in Selected / All display modes</small></span>
+                <input id="infographicVisibleToggle" type="checkbox" checked disabled /><i></i>
+              </label>
+              <div class="saved-look-actions infographic-library-actions">
+                <button id="focusInfographicButton" type="button" disabled>Focus anchor</button>
+                <button id="deleteInfographicButton" type="button" disabled>Delete</button>
+              </div>
+              <p id="infographicMeta" class="diagnostic-note">Infographic cards reference anchors; they do not rewrite the GLB.</p>
+            </div>
+
+            <div class="control-group presentation-state-card">
+              <div class="control-heading"><span>Presentation states</span><small id="presentationCount">0 SAVED</small></div>
+              <p class="diagnostic-note">Recall a complete static shot: look, object pose, camera, part visibility, variants and infographic display. Motion is intentionally excluded.</p>
+              <div class="saved-look-form">
+                <input id="presentationNameInput" type="text" maxlength="100" placeholder="Presentation name" aria-label="Presentation state name" />
+                <button id="savePresentationButton" type="button">Save current</button>
+              </div>
+              <select id="presentationSelect" aria-label="Saved presentation state" disabled>
+                <option value="">No presentations</option>
+              </select>
+              <div class="saved-look-actions presentation-state-actions">
+                <button id="applyPresentationButton" type="button" disabled>Apply</button>
+                <button id="deletePresentationButton" type="button" disabled>Delete</button>
+              </div>
+            </div>
+
+            <div class="control-group roadmap-card">
+              <small>V1.8 CONTRACT</small>
+              <strong>Anchored information, not baked graphics</strong>
+              <p>Cards are editable DOM overlays with transparent fills and SVG connector paths. They remain readable from every camera and persist inside .productvis projects.</p>
+            </div>
+          </section>
+
+          <section class="panel-page" data-panel-page="stories" role="tabpanel" hidden>
+            <div class="group-toolbar">
+              <span class="group-state"><i></i><b id="storyGroupStatus">EMPTY</b></span>
+              <button id="resetStoryGroupButton" class="group-reset" type="button">Reset Stories</button>
+            </div>
+
+            <div class="control-group story-explode-card">
+              <div class="control-heading"><span>Exploded composition</span><small id="explodeOffsetCount">0 PARTS OFFSET</small></div>
+              <strong id="storySelectedPartName" class="selected-part-name">Select a part in Parts</strong>
+              <div class="story-explode-grid">
+                <label class="field-stack"><span>Direction</span>
+                  <select id="explodeDirectionSelect" aria-label="Exploded part direction">
+                    <option value="auto">Auto radial</option>
+                    <option value="x">+ X</option><option value="-x">− X</option>
+                    <option value="y">+ Y</option><option value="-y">− Y</option>
+                    <option value="z">+ Z</option><option value="-z">− Z</option>
+                  </select>
+                </label>
+                <label class="range-control"><span><b>Distance</b><output id="explodeDistanceOutput">0.00</output></span>
+                  <input id="explodeDistanceInput" type="range" min="0" max="3" step="0.01" value="0" />
+                </label>
+              </div>
+              <div class="saved-look-actions story-explode-actions">
+                <button id="applyExplodeOffsetButton" type="button" disabled>Apply selected</button>
+                <button id="clearExplodeOffsetButton" type="button" disabled>Clear selected</button>
+                <button id="clearAllExplodeButton" type="button">Clear all</button>
+              </div>
+              <div class="saved-look-form">
+                <input id="explodeStateNameInput" type="text" maxlength="100" placeholder="Exploded state name" aria-label="Exploded state name" />
+                <button id="saveExplodeStateButton" type="button">Save state</button>
+              </div>
+              <select id="explodeStateSelect" aria-label="Exploded state" disabled><option value="">No exploded states</option></select>
+              <div class="saved-look-actions">
+                <button id="applyExplodeStateButton" type="button" disabled>Apply</button>
+                <button id="deleteExplodeStateButton" type="button" disabled>Delete</button>
+              </div>
+            </div>
+
+            <div class="control-group story-chapter-card">
+              <div class="control-heading"><span>Animation chapters</span><small id="animationChapterCount">0 CHAPTERS</small></div>
+              <label class="field-stack"><span>Embedded clip</span>
+                <select id="chapterClipSelect" aria-label="Animation chapter clip" disabled><option value="0">No animations</option></select>
+              </label>
+              <label class="field-stack"><span>Chapter name</span><input id="chapterNameInput" type="text" maxlength="100" placeholder="Opening mechanism" /></label>
+              <div class="story-time-grid">
+                <label class="field-stack"><span>Start (s)</span><input id="chapterStartInput" type="number" min="0" max="3600" step="0.01" value="0" /></label>
+                <label class="field-stack"><span>End (s)</span><input id="chapterEndInput" type="number" min="0.001" max="3600" step="0.01" value="1" /></label>
+                <label class="field-stack"><span>Speed</span><input id="chapterSpeedInput" type="number" min="0.05" max="4" step="0.05" value="1" /></label>
+              </div>
+              <div class="story-toggle-grid">
+                <label class="toggle-row"><span><b>Loop chapter</b><small>Repeats this range until stopped</small></span><input id="chapterLoopToggle" type="checkbox" /><i></i></label>
+                <label class="toggle-row"><span><b>Hold end pose</b><small>Keep the last chapter frame</small></span><input id="chapterHoldToggle" type="checkbox" checked /><i></i></label>
+              </div>
+              <div class="saved-look-actions">
+                <button id="createChapterButton" type="button" disabled>Create chapter</button>
+                <button id="updateChapterButton" type="button" disabled>Update selected</button>
+              </div>
+              <select id="chapterSelect" aria-label="Animation chapter" disabled><option value="">No chapters</option></select>
+              <div class="saved-look-actions">
+                <button id="previewChapterButton" type="button" disabled>Preview</button>
+                <button id="deleteChapterButton" type="button" disabled>Delete</button>
+              </div>
+            </div>
+
+            <div class="control-group story-builder-card">
+              <div class="control-heading"><span>Story director</span><small id="storyCount">0 STORIES</small></div>
+              <div class="story-create-row">
+                <input id="storyNameInput" type="text" maxlength="100" placeholder="Product story name" aria-label="Product story name" />
+                <label class="story-loop-label"><input id="storyLoopToggle" type="checkbox" /><span>Loop</span></label>
+                <button id="createStoryButton" type="button">Create</button>
+              </div>
+              <select id="storySelect" aria-label="Product story" disabled><option value="">No stories</option></select>
+              <div class="saved-look-actions">
+                <button id="deleteStoryButton" type="button" disabled>Delete story</button>
+                <button id="storyPanelPlayButton" type="button" disabled>Play</button>
+                <button id="storyPanelStopButton" type="button" disabled>Stop</button>
+              </div>
+            </div>
+
+            <div class="control-group story-step-card">
+              <div class="control-heading"><span>Story step</span><small id="storyStepCount">0 STEPS</small></div>
+              <label class="field-stack"><span>Step name</span><input id="storyStepNameInput" type="text" maxlength="100" placeholder="Reveal the mechanism" /></label>
+              <div class="story-reference-grid">
+                <label class="field-stack"><span>Saved shot</span><select id="storyPresentationSelect"><option value="">Keep current</option></select></label>
+                <label class="field-stack"><span>Exploded state</span><select id="storyExplodeSelect"><option value="">Keep current</option></select></label>
+                <label class="field-stack"><span>Animation chapter</span><select id="storyChapterSelect"><option value="">No chapter</option></select></label>
+                <label class="field-stack"><span>Infographic display</span>
+                  <select id="storyInfographicDisplaySelect"><option value="inherit">Inherit shot</option><option value="off">Off</option><option value="selected">Selected</option><option value="all">All</option></select>
+                </label>
+                <label class="field-stack"><span>Selected infographic</span><select id="storyInfographicSelect"><option value="">None</option></select></label>
+                <label class="field-stack"><span>Easing</span><select id="storyEasingSelect"><option value="cinematic">Cinematic</option><option value="ease-out">Ease out</option><option value="ease-in-out">Ease in/out</option><option value="linear">Linear</option></select></label>
+              </div>
+              <div class="story-duration-grid">
+                <label class="range-control"><span><b>Transition</b><output id="storyTransitionOutput">1.20 s</output></span><input id="storyTransitionInput" type="range" min="0" max="6" step="0.1" value="1.2" /></label>
+                <label class="range-control"><span><b>Hold</b><output id="storyHoldOutput">1.00 s</output></span><input id="storyHoldInput" type="range" min="0" max="10" step="0.1" value="1" /></label>
+              </div>
+              <div class="saved-look-actions">
+                <button id="addStoryStepButton" type="button" disabled>Add step</button>
+                <button id="updateStoryStepButton" type="button" disabled>Update selected</button>
+              </div>
+              <select id="storyStepSelect" aria-label="Story step" disabled><option value="">No story steps</option></select>
+              <div class="story-step-actions">
+                <button id="moveStoryStepUpButton" type="button" disabled>↑</button>
+                <button id="moveStoryStepDownButton" type="button" disabled>↓</button>
+                <button id="previewStoryStepButton" type="button" disabled>Preview</button>
+                <button id="deleteStoryStepButton" type="button" disabled>Delete</button>
+              </div>
+            </div>
+
+            <div class="control-group toggle-list">
+              <label class="toggle-row">
+                <span><b>Viewport story transport</b><small>Show controlled playback outside Advanced</small></span>
+                <input id="storyPreviewToggle" type="checkbox" /><i></i>
+              </label>
+            </div>
+
+            <div class="control-group roadmap-card">
+              <small>V1.9 CONTRACT</small>
+              <strong>Directed steps, not a timeline</strong>
+              <p>Each step combines a saved shot, exploded state, animation chapter, infographic state, camera transition and hold. No freeform keyframe editor is introduced.</p>
+            </div>
+          </section>
+
+          <section class="panel-page" data-panel-page="publish" role="tabpanel" hidden>
+            <div class="group-toolbar">
+              <span class="group-state"><i></i><b id="publishGroupStatus">DRAFT</b></span>
+              <button id="resetPublishGroupButton" class="group-reset" type="button">Reset Publish</button>
+            </div>
+
+            <div class="control-group publish-brand-card">
+              <div class="control-heading"><span>Brand identity</span><small>PLAYER SHELL</small></div>
+              <div class="publish-copy-grid">
+                <label class="field-stack"><span>Eyebrow</span><input id="experienceEyebrowInput" class="experience-field" type="text" maxlength="48" value="PRODUCT VIS" /></label>
+                <label class="field-stack"><span>Experience title</span><input id="experienceTitleInput" class="experience-field" type="text" maxlength="120" value="Product Experience" /></label>
+              </div>
+              <label class="field-stack"><span>Subtitle</span><textarea id="experienceSubtitleInput" class="experience-field" maxlength="260" rows="3">Explore the product through a guided realtime story.</textarea></label>
+              <div class="publish-style-grid">
+                <label class="variant-color-control"><span>Accent</span><input id="experienceAccentInput" class="experience-field" type="color" value="#ff7950" /></label>
+                <label class="field-stack"><span>Theme</span><select id="experienceThemeSelect" class="experience-field"><option value="dark">Dark</option><option value="light">Light</option><option value="auto">Auto</option></select></label>
+              </div>
+              <div class="publish-logo-row">
+                <div id="experienceLogoPreview" class="publish-logo-preview"><span>NO LOGO</span></div>
+                <div>
+                  <label class="wide-action publish-file-action" for="experienceLogoInput">Choose logo</label>
+                  <input id="experienceLogoInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden />
+                  <button id="removeExperienceLogoButton" class="wide-action subtle-health-action" type="button">Remove logo</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="control-group publish-player-card">
+              <div class="control-heading"><span>Guided player</span><small>READ ONLY</small></div>
+              <label class="field-stack"><span>Entry story</span><select id="experienceStorySelect" class="experience-field"><option value="">Current / first story</option></select></label>
+              <div class="publish-copy-grid">
+                <label class="field-stack"><span>Entry mode</span><select id="experienceEntryModeSelect" class="experience-field"><option value="intro">Branded intro</option><option value="direct">Direct to product</option></select></label>
+                <label class="field-stack"><span>Start button</span><input id="experienceStartLabelInput" class="experience-field" type="text" maxlength="72" value="Start experience" /></label>
+              </div>
+              <div class="toggle-list">
+                <label class="toggle-row"><span><b>Autoplay story</b><small>Start the selected story after entry</small></span><input id="experienceAutoplayToggle" class="experience-field" type="checkbox" checked /><i></i></label>
+                <label class="toggle-row"><span><b>Allow orbit</b><small>Let viewers rotate and zoom between directed steps</small></span><input id="experienceOrbitToggle" class="experience-field" type="checkbox" checked /><i></i></label>
+                <label class="toggle-row"><span><b>Product options</b><small>Expose the authored variant tray</small></span><input id="experienceOptionsToggle" class="experience-field" type="checkbox" checked /><i></i></label>
+                <label class="toggle-row"><span><b>Infographics</b><small>Expose authored cards and connector paths</small></span><input id="experienceInfographicsToggle" class="experience-field" type="checkbox" checked /><i></i></label>
+                <label class="toggle-row"><span><b>Step navigation</b><small>Show chapters, previous and next</small></span><input id="experienceStepNavigationToggle" class="experience-field" type="checkbox" checked /><i></i></label>
+              </div>
+            </div>
+
+            <div class="control-group publish-copy-card">
+              <div class="control-heading"><span>Intro & outro</span><small>BRANDED STATES</small></div>
+              <label class="toggle-row"><span><b>Intro enabled</b><small>Show the branded entry state</small></span><input id="experienceIntroEnabledToggle" class="experience-field" type="checkbox" checked /><i></i></label>
+              <label class="field-stack"><span>Intro title</span><input id="experienceIntroTitleInput" class="experience-field" type="text" maxlength="140" value="Meet the product." /></label>
+              <label class="field-stack"><span>Intro body</span><textarea id="experienceIntroBodyInput" class="experience-field" maxlength="800" rows="3">A guided 3D presentation built from the authored Product VIS story.</textarea></label>
+              <label class="toggle-row"><span><b>Outro enabled</b><small>Offer restart, exploration and a final CTA</small></span><input id="experienceOutroEnabledToggle" class="experience-field" type="checkbox" checked /><i></i></label>
+              <label class="field-stack"><span>Outro title</span><input id="experienceOutroTitleInput" class="experience-field" type="text" maxlength="140" value="Ready for the next step?" /></label>
+              <label class="field-stack"><span>Outro body</span><textarea id="experienceOutroBodyInput" class="experience-field" maxlength="800" rows="3">Restart the story, explore freely, or continue to the product page.</textarea></label>
+              <div class="publish-copy-grid">
+                <label class="field-stack"><span>CTA label</span><input id="experienceCtaLabelInput" class="experience-field" type="text" maxlength="72" value="Learn more" /></label>
+                <label class="field-stack"><span>CTA URL</span><input id="experienceCtaUrlInput" class="experience-field" type="url" placeholder="https://…" /></label>
+              </div>
+            </div>
+
+            <div class="control-group publish-export-card">
+              <div class="control-heading"><span>Graphic-composited output</span><small>OPTIONAL</small></div>
+              <div class="toggle-list">
+                <label class="toggle-row"><span><b>Brand overlay</b><small>Logo, title and accent in presentation PNGs</small></span><input id="experienceExportBrandToggle" class="experience-field" type="checkbox" checked /><i></i></label>
+                <label class="toggle-row"><span><b>Infographic cards</b><small>Compose visible cards into presentation PNGs</small></span><input id="experienceExportInfographicsToggle" class="experience-field" type="checkbox" checked /><i></i></label>
+                <label class="toggle-row"><span><b>Story caption</b><small>Include current story and step</small></span><input id="experienceExportStoryToggle" class="experience-field" type="checkbox" checked /><i></i></label>
+              </div>
+              <div class="publish-action-grid">
+                <button id="exportPresentationLandscapeButton" class="wide-action" type="button">Export 16:9 presentation</button>
+                <button id="exportPresentationPortraitButton" class="wide-action" type="button">Export portrait presentation</button>
+              </div>
+            </div>
+
+            <div class="control-group publish-share-card">
+              <div class="control-heading"><span>Experience package</span><small>.PRODUCTVIS-SHOW</small></div>
+              <p class="diagnostic-note">Publishes the original GLB, guided story, options, infographics and brand settings into one portable read-only package.</p>
+              <label class="field-stack"><span>Hosted package URL</span><input id="experienceHostedUrlInput" class="experience-field" type="url" placeholder="https://example.com/product.productvis-show" /></label>
+              <div class="publish-action-grid">
+                <button id="previewExperienceButton" class="wide-action" type="button">Preview presentation</button>
+                <button id="downloadExperienceButton" class="wide-action" type="button">Download package</button>
+                <button id="shareExperienceButton" class="wide-action" type="button">Share package</button>
+                <button id="copyExperienceLinkButton" class="wide-action" type="button">Copy player link</button>
+              </div>
+            </div>
+
+            <div class="control-group publish-ar-card">
+              <div class="control-heading"><span>Controlled AR handoff</span><small>NATIVE VIEWERS</small></div>
+              <p class="diagnostic-note">Use hosted HTTPS assets. Android launches the authored GLB in Scene Viewer; Apple devices use a supplied USDZ in AR Quick Look.</p>
+              <label class="field-stack"><span>Android GLB URL</span><input id="experienceAndroidGlbUrlInput" class="experience-field" type="url" placeholder="https://…/product.glb" /></label>
+              <label class="field-stack"><span>Apple USDZ URL</span><input id="experienceIosUsdzUrlInput" class="experience-field" type="url" placeholder="https://…/product.usdz" /></label>
+              <label class="field-stack"><span>Fallback URL</span><input id="experienceArFallbackUrlInput" class="experience-field" type="url" placeholder="https://…/product" /></label>
+              <div class="toggle-list">
+                <label class="toggle-row"><span><b>Resizable in AR</b><small>Allow viewers to scale the product</small></span><input id="experienceArResizableToggle" class="experience-field" type="checkbox" checked /><i></i></label>
+                <label class="toggle-row"><span><b>Vertical placement</b><small>Allow compatible Android wall placement</small></span><input id="experienceArVerticalToggle" class="experience-field" type="checkbox" /><i></i></label>
+                <label class="toggle-row"><span><b>Show AR action</b><small>Expose View in AR in presentation mode</small></span><input id="experienceShowArToggle" class="experience-field" type="checkbox" checked /><i></i></label>
+              </div>
+              <button id="testExperienceArButton" class="wide-action" type="button">Test AR handoff</button>
+            </div>
+
+            <div class="control-group roadmap-card">
+              <small>V2 CONTRACT</small>
+              <strong>One authored source, two intentional surfaces</strong>
+              <p>The editor remains powerful. The published player is read-only, branded and guided. It consumes the same project state instead of creating a second renderer.</p>
+            </div>
+          </section>
+
+          <section class="panel-page" data-panel-page="health" role="tabpanel" hidden>
+            <div class="group-toolbar">
+              <span class="group-state"><i></i><b id="healthGroupStatus">READY</b></span>
+              <button id="resetHealthGroupButton" class="group-reset" type="button">Reset Health</button>
+            </div>
+
+            <div class="control-group health-score-card" data-health-status="ready">
+              <div class="health-score-main">
+                <div class="health-score-value"><b id="preflightScore">100</b><small>/100</small></div>
+                <div>
+                  <div class="control-heading"><span>Asset preflight</span><small id="preflightStatus">READY</small></div>
+                  <p id="preflightSummary">Ready for a realtime product presentation.</p>
+                </div>
+              </div>
+              <dl class="diagnostic-grid health-metric-grid">
+                <div><dt>Meshes</dt><dd id="preflightMeshes">0</dd></div>
+                <div><dt>Draw calls</dt><dd id="preflightDrawCalls">0</dd></div>
+                <div><dt>Rendered tris</dt><dd id="preflightTriangles">0</dd></div>
+                <div><dt>Max texture</dt><dd id="preflightMaxTexture">—</dd></div>
+                <div><dt>Texture memory</dt><dd id="preflightTextureMemory">0 MB</dd></div>
+                <div><dt>Asset size</dt><dd id="preflightFileSize">—</dd></div>
+              </dl>
+            </div>
+
+            <div class="control-group preflight-issues-card">
+              <div class="control-heading"><span>Optimization review</span><small id="preflightIssueCount">0 ITEMS</small></div>
+              <div id="preflightIssueList" class="preflight-issue-list" aria-live="polite">
+                <p class="health-empty">No asset warnings detected.</p>
+              </div>
+            </div>
+
+            <div class="control-group toggle-list">
+              <label class="toggle-row">
+                <span><b>Auto quality</b><small>Adapts only after sustained performance pressure</small></span>
+                <input id="autoQualityToggle" type="checkbox" checked /><i></i>
+              </label>
+              <label class="toggle-row">
+                <span><b>Pause when hidden</b><small>Stops rendering when the tab is not visible</small></span>
+                <input id="pauseWhenHiddenToggle" type="checkbox" checked /><i></i>
+              </label>
+              <label class="toggle-row">
+                <span><b>Recovery drafts</b><small>Stores unsaved sessions locally on this device</small></span>
+                <input id="recoveryEnabledToggle" type="checkbox" checked /><i></i>
+              </label>
+            </div>
+
+            <div class="control-group diagnostics-card runtime-health-card">
+              <div class="control-heading"><span>Live runtime</span><small id="runtimeState">WARMING</small></div>
+              <dl class="diagnostic-grid diagnostic-grid-compact">
+                <div><dt>Frame rate</dt><dd id="runtimeFps">—</dd></div>
+                <div><dt>Frame time</dt><dd id="runtimeFrameTime">—</dd></div>
+                <div><dt>P95 frame</dt><dd id="runtimeP95">—</dd></div>
+                <div><dt>Render mode</dt><dd id="runtimeQuality">QUALITY</dd></div>
+              </dl>
+              <p id="runtimeNote" class="diagnostic-note">Collecting a stable performance window.</p>
+            </div>
+
+            <div class="control-group recovery-health-card">
+              <div class="control-heading"><span>Crash recovery</span><small id="recoveryStatus">LOCAL</small></div>
+              <p id="recoveryMeta" class="diagnostic-note">No recovery draft has been written in this session.</p>
+              <div class="health-action-row">
+                <button id="saveRecoveryButton" class="wide-action" type="button">Save recovery now</button>
+                <button id="clearRecoveryButton" class="wide-action subtle-health-action" type="button">Clear draft</button>
+              </div>
+            </div>
+
+            <div class="control-group support-health-card">
+              <div class="control-heading"><span>Local support report</span><small>NO ASSET BYTES</small></div>
+              <p class="diagnostic-note">Downloads browser, GPU, preflight and runtime diagnostics as JSON. Nothing is uploaded.</p>
+              <button id="downloadSupportReportButton" class="wide-action" type="button">Download support report</button>
+            </div>
+          </section>
         </div>
 
         <div class="panel-footer">
-          <span><i></i> GPU READY</span>
-          <small>GLB stays on this device</small>
+          <div class="panel-footer-status"><span><i></i> <b id="systemFooterStatus">GPU READY</b></span><small id="systemFooterMeta">GLB stays on this device</small></div>
+          <div class="panel-footer-actions">
+            <button id="resetButton" type="button" aria-label="Reset render">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 8.2V4.5h3.7"/><path d="M5 5a8.5 8.5 0 1 1-1.1 10.2"/></svg><span>Reset</span>
+            </button>
+            <button id="helpButton" type="button" aria-label="Open help">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.7 9.2a2.5 2.5 0 0 1 2.5-2c1.7 0 2.9 1 2.9 2.5 0 1.3-.7 2-1.8 2.7-.9.6-1.3 1.1-1.3 2.1"/><path d="M12 17.4h.01"/></svg><span>Help</span>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -365,7 +1216,7 @@
       <button class="dialog-close" value="close" aria-label="Close help">×</button>
       <small>PRODUCT VIS / QUICK START</small>
       <h2>A clean renderer, not a 3D suite.</h2>
-      <p>Import a self-contained GLB, shape the look, choose the camera and export a clean frame. The file never leaves your browser.</p>
+      <p>Import a self-contained GLB, use the bottom dock for the shot, then save a portable .productvis project or export a frame. Open Advanced for lighting, camera targets, material repair, product parts, option groups, anchored infographics, static presentation states, exploded compositions, animation chapters, directed product stories, asset health, recovery and runtime diagnostics. Files stay local.</p>
       <div class="help-grid">
         <div><kbd>Drag</kbd><span>Orbit camera</span></div>
         <div><kbd>Shift + Drag</kbd><span>Pan camera</span></div>
@@ -373,6 +1224,8 @@
         <div><kbd>F</kbd><span>Fit product</span></div>
         <div><kbd>1—5</kbd><span>Camera presets</span></div>
         <div><kbd>I</kbd><span>Import GLB</span></div>
+        <div><kbd>⌘ / Ctrl + S</kbd><span>Save project</span></div>
+        <div><kbd>⌘ / Ctrl + O</kbd><span>Open project</span></div>
       </div>
       <div class="help-note">
         <strong>Best input</strong>

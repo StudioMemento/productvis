@@ -1,15 +1,15 @@
 {
   "name": "product-vis",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "A local-first realtime GLB product presentation renderer.",
+  "description": "A local-first realtime product visualizer with branded read-only presentations, guided product stories, portable experience packages, composited output, and controlled AR handoff.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "test": "npm run test:unit",
-    "test:unit": "node --test tests/store.test.mjs tests/architecture.test.mjs",
+    "test:unit": "node --test tests/store.test.mjs tests/studio.test.mjs tests/material-diagnostics.test.mjs tests/preflight.test.mjs tests/performance.test.mjs tests/recovery.test.mjs tests/structure.test.mjs tests/variants.test.mjs tests/persistence.test.mjs tests/export.test.mjs tests/architecture.test.mjs tests/infographics.test.mjs tests/presentations.test.mjs tests/stories.test.mjs tests/experience.test.mjs",
     "test:smoke": "playwright test",
     "check": "npm run test:unit && npm run build"
   },

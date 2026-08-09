@@ -95,6 +95,15 @@ export class ProjectStore {
     return clone(this.#state);
   }
 
+  replaceProject(project, meta = {}) {
+    if (!project || typeof project !== 'object' || Array.isArray(project)) {
+      throw new TypeError('ProjectStore.replaceProject requires a project object.');
+    }
+    this.#state.project = clone(project);
+    this.#emit({ type: 'replace-project', ...meta });
+    return this.#revision;
+  }
+
   subscribe(listener) {
     if (typeof listener !== 'function') throw new TypeError('ProjectStore.subscribe requires a function.');
     this.#listeners.add(listener);
