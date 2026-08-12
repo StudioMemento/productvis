@@ -16,7 +16,7 @@ export const CURRENT_PROJECT_SCHEMA_VERSION = 10;
 
 const MATERIAL_MODES = new Set(['original', 'clay', 'chrome', 'matte']);
 const CAMERA_MODES = new Set(['presentation', 'inspect']);
-const SIDE_POLICIES = new Set(['original', 'front', 'back', 'double']);
+const SIDE_POLICIES = new Set(['auto', 'front', 'flip', 'double']);
 const EXPORT_FRAMING_MODES = new Set(['match-viewport', 'fill']);
 
 function clone(value) {
@@ -107,9 +107,18 @@ function sanitizeMaterialSideOverrides(value) {
   const result = {};
   Object.entries(value).slice(0, 512).forEach(([id, policy]) => {
     const normalizedId = String(id).replace(/[^0-9]/g, '').slice(0, 8);
-    if (normalizedId && SIDE_POLICIES.has(policy)) result[normalizedId] = policy;
+    const normalizedPolicy = policy === 'back' ? 'flip' : policy === 'original' ? 'auto' : policy;
+    if (normalizedId && SIDE_POLICIES.has(normalizedPolicy)) result[normalizedId] = normalizedPolicy;
   });
   return result;
+}
+
+function sanitizeSuggestedMaterialSideOverrideIds(value, overrides = {}) {
+  const source = Array.isArray(value) ? value : [];
+  return [...new Set(source
+    .slice(0, 512)
+    .map((id) => String(id).replace(/[^0-9]/g, '').slice(0, 8))
+    .filter((id) => id && overrides[id] === 'double'))];
 }
 
 function sanitizePartId(value) {
@@ -385,6 +394,7 @@ export function migrateProjectState(input, { now = new Date().toISOString() } = 
   const targetFallback = cameraPreset ? CAMERA_PRESETS[cameraPreset].target : defaults.camera.target;
   const cameraTarget = sanitizeTarget(sourceCamera.target, targetFallback);
 
+  const materialSideOverrides = sanitizeMaterialSideOverrides(sourceModel.materialSideOverrides);
   const project = {
     schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
     meta: {
@@ -405,7 +415,11 @@ export function migrateProjectState(input, { now = new Date().toISOString() } = 
       rotation: sanitizeRotation(sourceModel.rotation),
       positionXZ: sanitizePositionXZ(sourceModel.positionXZ),
       backfaceRepairEnabled: boolean(sourceModel.backfaceRepairEnabled, defaults.model.backfaceRepairEnabled),
-      materialSideOverrides: sanitizeMaterialSideOverrides(sourceModel.materialSideOverrides),
+      materialSideOverrides,
+      suggestedMaterialSideOverrideIds: sanitizeSuggestedMaterialSideOverrideIds(
+        sourceModel.suggestedMaterialSideOverrideIds,
+        materialSideOverrides,
+      ),
     },
     studio: {
       preset: backdropPreset,

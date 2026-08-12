@@ -1,9 +1,22 @@
-# PRODUCT VIS V2 — BRANDED PRESENTATION MODE
+# PRODUCT VIS V2.1A — STABILITY PASS
 
 
-> **GitHub compact edition:** this repository contains fewer than 100 files for direct browser upload. Historical V1–V1.9 documentation has been consolidated into `docs/PRODUCT_VIS_RELEASE_ARCHIVE_V1_TO_V1_9.md`. Application source, tests, runtime assets, and V2 documentation are unchanged.
+> **GitHub compact edition:** this repository contains fewer than 100 files for direct browser upload. Historical V1–V1.9 documentation is consolidated in `docs/PRODUCT_VIS_RELEASE_ARCHIVE_V1_TO_V1_9.md`; the complete V2.1A source, tests, runtime assets and current handoff documentation are included.
 
 PRODUCT VIS is a local-first realtime product renderer, configurator authoring environment and guided presentation system for self-contained GLB assets.
+
+## V2.1A checkpoint
+
+V2.1A preserves the complete V2 authoring/presentation foundation and repairs the renderer contracts needed before the interface becomes permanently visible:
+
+- fresh, aspect-aware camera bounds for Hero / Front / Side / Top / Detail / Fit;
+- robust framing protection against malformed outlier vertices;
+- explicit `Auto | Front | Double | Flip` material-side policies;
+- suggested thin-surface repairs without blanket glass/transparency mutation;
+- transparent depth-risk diagnostics;
+- pure-white, path-only Memento identity.
+
+The implementation and connected acceptance gate are documented in `docs/PRODUCT_VIS_V2_1A_IMPLEMENTATION.md`. The persistent Light / Camera / Variants / Motion / Story shelf remains the V2.1B checkpoint rather than being mixed into this stability pass.
 
 V2 completes the bridge from **authoring** to **delivery**.
 

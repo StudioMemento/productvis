@@ -52,7 +52,7 @@ import {
 import { formatBytes, stripExtension, cleanErrorMessage, capitalize } from '../utils/format.js';
 
 const EPSILON = 0.0001;
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.1.0-alpha.1';
 const RECOVERY_DEBOUNCE_MS = 1800;
 const RECOVERY_MIN_INTERVAL_MS = 8000;
 const VARIANT_FINISHES = Object.freeze({
@@ -183,7 +183,9 @@ export class AppController {
       });
       this.cameraRig = new CameraRig(
         this.engine,
-        () => this.product.getMetrics(),
+        ({ refresh = false } = {}) => (refresh
+          ? this.product.updateBounds({ updateShadowScale: false, notify: false })
+          : this.product.getMetrics()),
         { onTargetChange: (change) => this.#handleCameraTargetChange(change) },
       ).initialize();
       this.anchorOverlay = new AnchorOverlay(this.dom.anchorOverlay, this.engine.camera, {
@@ -560,6 +562,7 @@ export class AppController {
         positionXZ: { x: 0, z: 0 },
         backfaceRepairEnabled: false,
         materialSideOverrides: {},
+        suggestedMaterialSideOverrideIds: [],
       });
       Object.assign(state.project.motion, {
         clipIndex: motionState.clipIndex,
@@ -1355,12 +1358,14 @@ export class AppController {
   setBackfaceRepair(enabled, { showMessage = true } = {}) {
     const state = this.product.setBackfaceRepairEnabled(enabled);
     this.store.set('project.model.backfaceRepairEnabled', state, { source: 'control' });
+    this.store.set('project.model.materialSideOverrides', this.product.getMaterialSideOverrides(), { source: 'material-repair' });
+    this.store.set('project.model.suggestedMaterialSideOverrideIds', this.product.getSuggestedMaterialSideOverrideIds(), { source: 'material-repair' });
     this.ui.setBackfaceRepair(state);
     this.ui.updateMaterialDiagnostics(this.product.getMaterialDiagnostics());
     if (showMessage) {
       this.ui.showToast(state
-        ? 'Automatic safe-candidate repair enabled.'
-        : 'Automatic safe-candidate repair disabled.');
+        ? 'Suggested thin-surface repairs applied as explicit Double overrides.'
+        : 'Suggested repairs removed; imported side policies restored.');
     }
   }
 
@@ -1368,6 +1373,7 @@ export class AppController {
     if (!this.product.setMaterialSideOverride(materialId, mode)) return;
     const overrides = this.product.getMaterialSideOverrides();
     this.store.set('project.model.materialSideOverrides', overrides, { source: 'material-repair' });
+    this.store.set('project.model.suggestedMaterialSideOverrideIds', this.product.getSuggestedMaterialSideOverrideIds(), { source: 'material-repair' });
     this.ui.updateMaterialDiagnostics(this.product.getMaterialDiagnostics());
     if (showMessage) {
       const label = mode === 'auto' ? 'Auto side policy restored.' : `${capitalize(mode)} side override applied.`;
@@ -2187,6 +2193,7 @@ export class AppController {
     this.setBackfaceRepair(false, { showMessage: false });
     this.product.clearMaterialSideOverrides();
     this.store.set('project.model.materialSideOverrides', {}, { source: 'group-reset' });
+    this.store.set('project.model.suggestedMaterialSideOverrideIds', [], { source: 'group-reset' });
     this.ui.updateMaterialDiagnostics(this.product.getMaterialDiagnostics());
     if (showMessage) this.ui.showToast('Object controls reset.');
   }
@@ -2520,6 +2527,7 @@ export class AppController {
         materialMode: this.product.materialMode,
         backfaceRepairEnabled: this.product.backfaceRepairEnabled,
         materialSideOverrides: this.product.getMaterialSideOverrides(),
+        suggestedMaterialSideOverrideIds: this.product.getSuggestedMaterialSideOverrideIds(),
       },
       configurator: this.#getConfiguratorState(),
       camera,
@@ -2547,7 +2555,9 @@ export class AppController {
       this.product.applyTransformState(project.model);
       this.product.setMaterialMode(project.model.materialMode);
       this.product.setBackfaceRepairEnabled(project.model.backfaceRepairEnabled);
-      this.product.setMaterialSideOverrides(project.model.materialSideOverrides);
+      this.product.setMaterialSideOverrides(project.model.materialSideOverrides, {
+        suggestedIds: project.model.suggestedMaterialSideOverrideIds,
+      });
       this.ui.updateTransformUI(project.model.userScale, project.model.userOffset);
       this.ui.setMaterialMode(project.model.materialMode);
       this.ui.setBackfaceRepair(project.model.backfaceRepairEnabled);
@@ -2653,7 +2663,9 @@ export class AppController {
       this.product.applyTransformState(project.model);
       this.product.setMaterialMode(project.model.materialMode);
       this.product.setBackfaceRepairEnabled(project.model.backfaceRepairEnabled);
-      this.product.setMaterialSideOverrides(project.model.materialSideOverrides);
+      this.product.setMaterialSideOverrides(project.model.materialSideOverrides, {
+        suggestedIds: project.model.suggestedMaterialSideOverrideIds,
+      });
       this.product.setPartVisibilityOverrides(project.configurator.partVisibility);
       this.product.setVariantSelections(project.configurator.variantSelections, {
         activeConfigurationId: project.configurator.activeConfigurationId,
@@ -2777,8 +2789,16 @@ export class AppController {
   }
 
   #handleBoundsChanged(metrics, options) {
-    this.studio?.updateForBounds(metrics.bounds, metrics.radius, options);
-    this.cameraRig?.updateLimits(metrics.radius, metrics.bounds);
+    const useRobustFrame = metrics.framingSource === 'robust-core';
+    this.studio?.updateForBounds(
+      useRobustFrame ? metrics.framingBounds : metrics.bounds,
+      useRobustFrame ? metrics.framingRadius : metrics.radius,
+      options,
+    );
+    this.cameraRig?.updateLimits(
+      metrics.framingRadius || metrics.radius,
+      metrics.framingBounds || metrics.bounds,
+    );
     this.#syncDiagnosticsUI(true);
   }
 

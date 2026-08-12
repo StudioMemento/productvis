@@ -4,6 +4,7 @@ import {
   filterStructureRecords,
   sanitizeVisibilityOverrides,
 } from './StructureIndex.js';
+import { computeVisibleBounds } from '../model/VisibleBounds.js';
 
 const MAX_VISIBILITY_STATES = 32;
 const MAX_ANCHORS = 128;
@@ -509,16 +510,16 @@ export class ProductStructure {
   }
 
   getVisibleBounds(target = new THREE.Box3()) {
-    target.makeEmpty();
-    if (!this.root) return target;
-    this.root.updateMatrixWorld(true);
-    this.root.traverse((object) => {
-      if (!object.isMesh || !this.#isEffectivelyVisibleObject(object)) return;
-      const box = new THREE.Box3().setFromObject(object, true);
-      if (!box.isEmpty()) target.union(box);
-    });
-    if (target.isEmpty()) target.setFromObject(this.root, true);
+    const report = this.getVisibleBoundsReport({ allowRobustTrim: false });
+    target.copy(report.fullBounds);
     return target;
+  }
+
+  getVisibleBoundsReport({ allowRobustTrim = true } = {}) {
+    return computeVisibleBounds(this.root, {
+      allowRobustTrim,
+      isVisible: (object) => this.#isEffectivelyVisibleObject(object),
+    });
   }
 
   update() {
@@ -591,16 +592,10 @@ export class ProductStructure {
   }
 
   #getObjectVisibleBounds(object) {
-    const box = new THREE.Box3().makeEmpty();
-    object?.traverse?.((child) => {
-      if (!child.isMesh || !this.#isEffectivelyVisibleObject(child)) return;
-      const childBox = new THREE.Box3().setFromObject(child, true);
-      if (!childBox.isEmpty()) box.union(childBox);
-    });
-    if (box.isEmpty() && object?.isMesh && this.#isEffectivelyVisibleObject(object)) {
-      box.setFromObject(object, true);
-    }
-    return box;
+    return computeVisibleBounds(object, {
+      allowRobustTrim: false,
+      isVisible: (child) => this.#isEffectivelyVisibleObject(child),
+    }).fullBounds;
   }
 
   #serializeRecord(record) {

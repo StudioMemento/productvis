@@ -90,7 +90,7 @@ export function createPublishedProject(project, { now = new Date().toISOString()
 export function encodeExperienceFile({
   project,
   asset,
-  appVersion = '2.0.0',
+  appVersion = '2.1.0-alpha.1',
   createdAt = null,
   modifiedAt = new Date().toISOString(),
 } = {}) {

@@ -253,8 +253,10 @@ export function collectDom() {
     materialHealth: byId('materialHealth'),
     diagTransparent: byId('diagTransparent'),
     diagAlphaMasked: byId('diagAlphaMasked'),
+    diagAlphaBlended: byId('diagAlphaBlended'),
     diagGlass: byId('diagGlass'),
     diagDoubleSided: byId('diagDoubleSided'),
+    diagDepthRisks: byId('diagDepthRisks'),
     diagBackfaceCandidates: byId('diagBackfaceCandidates'),
     diagNotes: byId('diagNotes'),
 

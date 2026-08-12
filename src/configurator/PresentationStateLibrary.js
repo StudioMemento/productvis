@@ -90,14 +90,22 @@ function sanitizeStringMap(value, max = 128) {
 }
 
 function sanitizeSideOverrides(value) {
-  const policies = new Set(['original', 'front', 'back', 'double']);
+  const policies = new Set(['auto', 'front', 'flip', 'double']);
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const result = {};
   Object.entries(value).slice(0, 512).forEach(([key, policy]) => {
     const id = String(key).replace(/[^0-9]/g, '').slice(0, 8);
-    if (id && policies.has(policy)) result[id] = policy;
+    const normalizedPolicy = policy === 'back' ? 'flip' : policy === 'original' ? 'auto' : policy;
+    if (id && policies.has(normalizedPolicy)) result[id] = normalizedPolicy;
   });
   return result;
+}
+
+function sanitizeSuggestedSideOverrideIds(value, overrides = {}) {
+  return [...new Set((Array.isArray(value) ? value : [])
+    .slice(0, 512)
+    .map((id) => String(id).replace(/[^0-9]/g, '').slice(0, 8))
+    .filter((id) => id && overrides[id] === 'double'))];
 }
 
 export function createPresentationStateId() {
@@ -113,6 +121,7 @@ export function sanitizePresentationSnapshot(value = {}) {
   const configurator = source.configurator || {};
   const render = source.render || {};
   const target = sanitizeTarget(camera.target);
+  const materialSideOverrides = sanitizeSideOverrides(model.materialSideOverrides);
   return {
     studio: {
       preset: cleanId(studio.preset, null, 64),
@@ -140,7 +149,11 @@ export function sanitizePresentationSnapshot(value = {}) {
       rotation: sanitizeRotation(model.rotation),
       positionXZ: { x: clamp(model.positionXZ?.x, -50, 50, 0), z: clamp(model.positionXZ?.z, -50, 50, 0) },
       backfaceRepairEnabled: bool(model.backfaceRepairEnabled, false),
-      materialSideOverrides: sanitizeSideOverrides(model.materialSideOverrides),
+      materialSideOverrides,
+      suggestedMaterialSideOverrideIds: sanitizeSuggestedSideOverrideIds(
+        model.suggestedMaterialSideOverrideIds,
+        materialSideOverrides,
+      ),
     },
     camera: {
       preset: cleanId(camera.preset, null, 64),

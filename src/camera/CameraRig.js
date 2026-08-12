@@ -2,6 +2,12 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CAMERA_PRESETS, DEFAULT_CAMERA_TARGET } from '../config/presets.js';
 import { easeOutQuint } from '../utils/math.js';
+import {
+  computeClipRange,
+  computeFitDistanceToBounds,
+  isFiniteBox3,
+  resolveFramingMetrics,
+} from './CameraFraming.js';
 
 function cloneTarget(target = DEFAULT_CAMERA_TARGET) {
   return {
@@ -41,6 +47,9 @@ export class CameraRig {
       insideModel: false,
       clampedToGround: false,
       targetClamped: false,
+      boundsValid: false,
+      boundsSource: 'uninitialized',
+      rejectedPreset: null,
     };
   }
 
@@ -72,35 +81,67 @@ export class CameraRig {
 
   setPreset(name, { immediate = false } = {}) {
     const preset = CAMERA_PRESETS[name];
-    const metrics = this.getModelMetrics();
-    if (!preset || !metrics?.root) return false;
+    const metrics = this.#readMetrics({ refresh: true, rejectedPreset: name });
+    if (!preset || !metrics) return false;
 
     const normalizedTarget = cloneTarget(preset.target || { x: 0, y: preset.targetY, z: 0 });
     const target = this.#targetFromNormalized(normalizedTarget, metrics.bounds);
-    const distance = Math.max(this.computeFitDistance(metrics.radius) * preset.distance, this.safety.minDistance);
     const direction = new THREE.Vector3(...preset.direction).normalize();
-    const position = target.clone().add(direction.multiplyScalar(distance));
+    this.updateLimits(metrics.radius, metrics.bounds);
+    const baseDistance = computeFitDistanceToBounds(this.camera, metrics.bounds, target, direction, {
+      padding: preset.padding || 1.07,
+      minDistance: this.safety.minDistance,
+    });
+    if (!Number.isFinite(baseDistance)) {
+      this.safety.boundsValid = false;
+      this.safety.rejectedPreset = name;
+      return false;
+    }
+    const distance = THREE.MathUtils.clamp(
+      baseDistance * (Number(preset.distance) || 1),
+      this.safety.minDistance,
+      this.safety.maxDistance,
+    );
+    const position = target.clone().add(direction.clone().multiplyScalar(distance));
+    if (![position.x, position.y, position.z, target.x, target.y, target.z].every(Number.isFinite)) {
+      this.safety.boundsValid = false;
+      this.safety.rejectedPreset = name;
+      return false;
+    }
 
     this.currentPreset = name;
     this.targetNormalized = normalizedTarget;
-    this.tweenTo(position, target, immediate ? 1 : 820);
+    this.safety.rejectedPreset = null;
+    this.tweenTo(position, target, immediate ? 1 : 820, { normalizedTarget });
     return true;
   }
 
   fit({ immediate = false } = {}) {
-    const metrics = this.getModelMetrics();
-    if (!metrics?.root) return false;
+    const metrics = this.#readMetrics({ refresh: true, rejectedPreset: 'fit' });
+    if (!metrics) return false;
     const normalizedTarget = { x: 0, y: 0.48, z: 0 };
     const target = this.#targetFromNormalized(normalizedTarget, metrics.bounds);
     const direction = this.camera.position.clone().sub(this.controls.target).normalize();
     if (!Number.isFinite(direction.x) || direction.lengthSq() < 0.001) {
       direction.set(1, 0.35, 1.5).normalize();
     }
-    const desiredDistance = Math.max(this.computeFitDistance(metrics.radius), this.safety.minDistance);
-    const position = target.clone().add(direction.multiplyScalar(desiredDistance));
+    this.updateLimits(metrics.radius, metrics.bounds);
+    const desiredDistance = computeFitDistanceToBounds(this.camera, metrics.bounds, target, direction, {
+      padding: 1.07,
+      minDistance: this.safety.minDistance,
+    });
+    if (!Number.isFinite(desiredDistance)) {
+      this.safety.boundsValid = false;
+      this.safety.rejectedPreset = 'fit';
+      return false;
+    }
+    const position = target.clone().add(direction.clone().multiplyScalar(
+      THREE.MathUtils.clamp(desiredDistance, this.safety.minDistance, this.safety.maxDistance),
+    ));
     this.currentPreset = null;
     this.targetNormalized = normalizedTarget;
-    this.tweenTo(position, target, immediate ? 1 : 650);
+    this.safety.rejectedPreset = null;
+    this.tweenTo(position, target, immediate ? 1 : 650, { normalizedTarget });
     return true;
   }
 
@@ -112,9 +153,27 @@ export class CameraRig {
     return (safeRadius / Math.sin(Math.max(0.12, limitingFov / 2))) * 1.04;
   }
 
+  #readMetrics({ refresh = false, rejectedPreset = null } = {}) {
+    const raw = this.getModelMetrics?.({ refresh });
+    const metrics = resolveFramingMetrics(raw);
+    if (!metrics) {
+      this.safety.boundsValid = false;
+      this.safety.boundsSource = raw?.framingSource || 'invalid';
+      if (rejectedPreset) this.safety.rejectedPreset = rejectedPreset;
+      return null;
+    }
+    this.safety.boundsValid = true;
+    this.safety.boundsSource = metrics.boundsSource || 'full';
+    return metrics;
+  }
+
   updateLimits(radius, bounds) {
+    if (!this.controls || !isFiniteBox3(bounds)) {
+      this.safety.boundsValid = false;
+      return false;
+    }
     const safeRadius = Math.max(radius, 0.4);
-    const size = bounds?.getSize(new THREE.Vector3()) || new THREE.Vector3(safeRadius, safeRadius, safeRadius);
+    const size = bounds.getSize(new THREE.Vector3());
     const minDistance = this.mode === 'inspect'
       ? Math.max(0.14, safeRadius * 0.18, size.length() * 0.04)
       : Math.max(0.48, safeRadius * 0.62, size.length() * 0.14);
@@ -159,6 +218,7 @@ export class CameraRig {
 
     this.enforceSafety();
     this.updateClipping();
+    return true;
   }
 
   tweenTo(position, target, duration, {
@@ -250,16 +310,16 @@ export class CameraRig {
   setInspectMode(enabled) {
     this.mode = enabled ? 'inspect' : 'presentation';
     this.#applyOrbitEnvelope();
-    const metrics = this.getModelMetrics();
-    if (metrics?.root) this.updateLimits(metrics.radius, metrics.bounds);
+    const metrics = this.#readMetrics();
+    if (metrics) this.updateLimits(metrics.radius, metrics.bounds);
     this.enforceSafety();
     this.updateClipping();
     return this.mode;
   }
 
   setTargetNormalized(nextTarget, { notify = false } = {}) {
-    const metrics = this.getModelMetrics();
-    if (!metrics?.root) return null;
+    const metrics = this.#readMetrics();
+    if (!metrics) return null;
     const target = {
       x: THREE.MathUtils.clamp(Number(nextTarget?.x) || 0, -1, 1),
       y: THREE.MathUtils.clamp(Number(nextTarget?.y), 0, 1),
@@ -293,8 +353,8 @@ export class CameraRig {
   }
 
   worldPointToNormalized(worldPoint) {
-    const metrics = this.getModelMetrics();
-    if (!metrics?.root || !worldPoint) return null;
+    const metrics = this.#readMetrics();
+    if (!metrics || !worldPoint) return null;
     const point = worldPoint.isVector3
       ? worldPoint
       : new THREE.Vector3(Number(worldPoint[0]) || 0, Number(worldPoint[1]) || 0, Number(worldPoint[2]) || 0);
@@ -315,8 +375,8 @@ export class CameraRig {
   }
 
   getTargetNormalized() {
-    const metrics = this.getModelMetrics();
-    if (!metrics?.root || !this.controls) return cloneTarget(this.targetNormalized);
+    const metrics = this.#readMetrics();
+    if (!metrics || !this.controls) return cloneTarget(this.targetNormalized);
     const bounds = metrics.bounds;
     const size = bounds.getSize(new THREE.Vector3());
     const center = bounds.getCenter(new THREE.Vector3());
@@ -341,8 +401,8 @@ export class CameraRig {
   }
 
   getPose() {
-    const metrics = this.getModelMetrics();
-    if (!metrics?.root || !this.controls) return null;
+    const metrics = this.#readMetrics();
+    if (!metrics || !this.controls) return null;
     const offset = this.camera.position.clone().sub(this.controls.target);
     const distance = offset.length();
     if (!Number.isFinite(distance) || distance < 0.000001) return null;
@@ -356,8 +416,9 @@ export class CameraRig {
   }
 
   setPose(pose, { preset = null } = {}) {
-    const metrics = this.getModelMetrics();
-    if (!metrics?.root || !this.controls || !pose) return false;
+    const metrics = this.#readMetrics({ refresh: true });
+    if (!metrics || !this.controls || !pose) return false;
+    this.updateLimits(metrics.radius, metrics.bounds);
     const targetNormalized = {
       x: THREE.MathUtils.clamp(Number(pose.target?.x) || 0, -1, 1),
       y: THREE.MathUtils.clamp(
@@ -402,8 +463,9 @@ export class CameraRig {
     preset = null,
     focalLength = null,
   } = {}) {
-    const metrics = this.getModelMetrics();
-    if (!metrics?.root || !this.controls || !pose) return false;
+    const metrics = this.#readMetrics({ refresh: true });
+    if (!metrics || !this.controls || !pose) return false;
+    this.updateLimits(metrics.radius, metrics.bounds);
     const targetNormalized = {
       x: THREE.MathUtils.clamp(Number(pose.target?.x) || 0, -1, 1),
       y: THREE.MathUtils.clamp(
@@ -500,8 +562,8 @@ export class CameraRig {
   }
 
   enforceSafety() {
-    const metrics = this.getModelMetrics();
-    if (!metrics?.root || !this.controls) return;
+    const metrics = this.#readMetrics();
+    if (!metrics || !this.controls) return;
 
     const bounds = metrics.bounds;
     const target = this.controls.target;
@@ -574,16 +636,15 @@ export class CameraRig {
   }
 
   updateClipping() {
-    const metrics = this.getModelMetrics();
-    if (!metrics?.root) return;
-    const distance = this.camera.position.distanceTo(this.controls.target);
-    const radius = Math.max(metrics.radius, 0.4);
-    const near = THREE.MathUtils.clamp(
-      Math.min(radius * 0.08, distance * 0.2),
-      0.01,
-      this.mode === 'inspect' ? 0.08 : 0.18,
-    );
-    const far = Math.max(near + 12, radius * 18 + distance * 4);
+    const metrics = this.#readMetrics();
+    if (!metrics || !this.controls) return;
+    const range = computeClipRange(this.camera, metrics.bounds, {
+      target: this.controls.target,
+      mode: this.mode,
+      fallbackRadius: metrics.radius,
+    });
+    if (!range) return;
+    const { near, far } = range;
     if (Math.abs(this.camera.near - near) > 0.0001 || Math.abs(this.camera.far - far) > 0.01) {
       this.camera.near = near;
       this.camera.far = far;
@@ -608,6 +669,9 @@ export class CameraRig {
       currentDistance: this.camera.position.distanceTo(this.controls.target),
       transitioning: this.isTransitioning(),
       interactionEnabled: this.interactionEnabled,
+      boundsValid: this.safety.boundsValid,
+      boundsSource: this.safety.boundsSource,
+      rejectedPreset: this.safety.rejectedPreset,
     };
   }
 }

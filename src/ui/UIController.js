@@ -796,7 +796,11 @@ export class UIController {
     this.dom.cameraMinDistance.textContent = Number(diagnostics.minDistance || 0).toFixed(2);
     this.dom.cameraNearValue.textContent = `${Number(diagnostics.near || 0).toFixed(3)} / ${Math.round(Number(diagnostics.far || 0))}`;
     if (diagnostics.target) this.updateCameraTargetUI(diagnostics.target);
-    this.dom.cameraSafetyNote.textContent = diagnostics.insideModel
+    this.dom.cameraSafetyNote.textContent = diagnostics.boundsValid === false
+      ? `Camera framing rejected invalid product bounds${diagnostics.rejectedPreset ? ` for ${diagnostics.rejectedPreset}` : ''}.`
+      : diagnostics.boundsSource === 'robust-core'
+        ? 'Camera framing ignored pathological outlier geometry from the imported bounds.'
+      : diagnostics.insideModel
       ? 'Camera was kept outside the product shell.'
       : diagnostics.clampedToGround
         ? 'Camera was clamped above the presentation ground.'
@@ -811,14 +815,18 @@ export class UIController {
     this.dom.materialHealth.textContent = String((diagnostics.health || 'safe')).toUpperCase();
     this.dom.diagTransparent.textContent = String(diagnostics.transparent || 0);
     this.dom.diagAlphaMasked.textContent = String(diagnostics.alphaMasked || 0);
+    this.dom.diagAlphaBlended.textContent = String(diagnostics.alphaBlended || 0);
     this.dom.diagGlass.textContent = String(diagnostics.glass || 0);
     this.dom.diagDoubleSided.textContent = String(diagnostics.doubleSided || 0);
+    this.dom.diagDepthRisks.textContent = String(diagnostics.depthWriteRisks || 0);
     this.dom.diagBackfaceCandidates.textContent = String(diagnostics.backfaceCandidates || 0);
     this.dom.diagNotes.textContent = diagnostics.notes?.[0]
-      || 'Opaque materials remain unchanged. Glass is reported but not forced double-sided.';
+      || 'Auto preserves imported side settings. Glass and transparent depth behavior are diagnosed separately.';
     this.dom.backfaceRepairToggle.checked = Boolean(diagnostics.backfaceRepairEnabled);
     this.dom.backfaceRepairToggle.disabled = Number(diagnostics.backfaceCandidates || 0) === 0;
-    this.dom.materialListMeta.textContent = `${diagnostics.uniqueMaterials || 0} MATERIALS · ${diagnostics.manualOverrides || 0} OVERRIDES`;
+    const manual = Number(diagnostics.manualOverrides || 0);
+    const suggested = Number(diagnostics.suggestedOverrides || 0);
+    this.dom.materialListMeta.textContent = `${diagnostics.uniqueMaterials || 0} MATERIALS · ${manual} MANUAL${suggested ? ` · ${suggested} SUGGESTED` : ''}`;
     this.#renderMaterialList(diagnostics);
   }
 
@@ -828,6 +836,7 @@ export class UIController {
         (item.safeBackfaceCandidate ? 8 : 0)
         + (item.glassLike ? 4 : 0)
         + (item.alphaBlended ? 3 : 0)
+        + (item.transparentDepthRisk ? 6 : 0)
         + (item.alphaMasked ? 2 : 0)
         + (item.sideOverride !== 'auto' ? 16 : 0)
       );
@@ -842,6 +851,7 @@ export class UIController {
         item.meshName,
         item.sideOverride,
         item.effectiveSide,
+        item.suggestedRepair,
         item.issues,
       ]),
     });
@@ -861,18 +871,22 @@ export class UIController {
       const row = document.createElement('div');
       row.className = 'material-diagnostic-row';
       row.classList.toggle('is-repaired', Boolean(item.repairActive));
-      row.classList.toggle('is-watch', Boolean(item.glassLike || item.alphaBlended));
+      row.classList.toggle('is-watch', Boolean(item.glassLike || item.alphaBlended || item.transparentDepthRisk));
+      row.classList.toggle('is-suggested', Boolean(item.suggestedRepair));
 
       const copy = document.createElement('div');
       copy.className = 'material-diagnostic-copy';
       const title = document.createElement('strong');
       title.textContent = item.materialName || `Material ${item.id}`;
       const meta = document.createElement('small');
-      meta.textContent = `${item.meshName || 'Mesh'} · ${String(item.effectiveSide || item.originalSide).toUpperCase()}`;
+      const importedSide = String(item.originalSide || 'front').toUpperCase();
+      const effectiveSide = String(item.effectiveSide || item.originalSide || 'front').toUpperCase();
+      meta.textContent = `${item.meshName || 'Mesh'} · IMPORTED ${importedSide}${effectiveSide !== importedSide ? ` → ${effectiveSide}` : ''}`;
       const tags = document.createElement('div');
       tags.className = 'material-tags';
-      const tagValues = item.issues?.length ? item.issues : ['opaque'];
-      tagValues.slice(0, 3).forEach((issue) => {
+      const tagValues = [...(item.issues?.length ? item.issues : ['opaque'])];
+      if (item.suggestedRepair) tagValues.unshift('suggested-repair');
+      tagValues.slice(0, 4).forEach((issue) => {
         const tag = document.createElement('span');
         tag.textContent = issue.replaceAll('-', ' ');
         tags.appendChild(tag);
@@ -884,17 +898,21 @@ export class UIController {
       select.setAttribute('aria-label', `Side policy for ${item.materialName || `material ${item.id}`}`);
       [
         ['auto', 'Auto'],
-        ['original', 'Original'],
         ['front', 'Front'],
-        ['back', 'Back'],
         ['double', 'Double'],
+        ['flip', 'Flip'],
       ].forEach(([value, label]) => {
         const option = document.createElement('option');
         option.value = value;
         option.textContent = label;
         select.appendChild(option);
       });
-      select.value = item.sideOverride || 'auto';
+      const currentPolicy = item.sideOverride === 'back'
+        ? 'flip'
+        : item.sideOverride === 'original'
+          ? 'auto'
+          : item.sideOverride || 'auto';
+      select.value = currentPolicy;
       row.append(copy, select);
       this.dom.materialDiagnosticsList.appendChild(row);
     });

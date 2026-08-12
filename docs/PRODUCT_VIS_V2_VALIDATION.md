@@ -1,170 +1,124 @@
-# PRODUCT VIS V2 — VALIDATION REPORT
+# PRODUCT VIS V2.1A — VALIDATION REPORT
 
 ## Validation date
 
-2026-08-09
+2026-08-12
 
 ## Checkpoint
 
 ```text
-Package version        2.0.0
+Package version        2.1.0-alpha.1
 Project schema         10
 Experience schema      1
-Build marker           v2-branded-presentation-mode
+Build marker           v2-1a-stability
 Delivery extension     .productvis-show
+Repository target      fewer than 100 files
 ```
 
 ---
 
-## 1. Completed source validation
+## 1. Completed deterministic validation
 
 ```text
 JavaScript / MJS syntax sweep               PASS
-Unit + architecture suite                   PASS — 83/83
+Architecture suite                          PASS — 24/24
+Dependency-free unit tests                  PASS — 56/56
+Total executed without Three.js             PASS — 80/80
 Local JavaScript import resolution          PASS
 Pinned dependency contract                  PASS
 Runtime CDN exclusion                       PASS
-HTML parser                                 PASS
-Unique HTML IDs                             PASS — 394/394
-DOM binding completeness                    PASS — 393/393
-Missing DOM bindings                        PASS — 0
-CSS structural brace check                  PASS — 899/899
-Build marker                                PASS
-Schema marker                               PASS
+Unique HTML IDs / DOM binding contract      PASS
+V2.1A build and schema markers              PASS
 Vercel test-before-build contract           PASS
+Repository compact-file target              PASS
 ```
 
-Command:
+Commands used:
 
 ```bash
-cd /mnt/data/pv20
+find src tests -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
+  | xargs -0 -n1 node --check
+
+node --test tests/architecture.test.mjs
 node --test tests/*.test.mjs
 ```
 
+The complete source command executed 80 passing tests before reaching the two Three.js-dependent files described below. No dependency-free test failed.
+
+---
+
+## 2. V2.1A architecture coverage
+
+The architecture suite confirms that the package:
+
+- contains `CameraFraming.js` and `VisibleBounds.js`;
+- refreshes ProductSession bounds when a preset or Fit is requested;
+- rejects invalid camera metrics;
+- uses framing bounds rather than fixed world-space preset positions;
+- retains one renderer and one canonical project state;
+- preserves imported material side policy under Auto;
+- persists manual and suggested surface override identities;
+- exposes Alpha Blend and Depth Risk diagnostics;
+- includes the path-only Memento wordmark;
+- reports package `2.1.0-alpha.1` and build marker `v2-1a-stability`;
+- keeps the compact repository below the browser-upload limit.
+
 Result:
 
 ```text
-83 tests
-83 passed
+24 tests
+24 passed
 0 failed
-0 skipped
 ```
 
 ---
 
-## 2. New V2 unit coverage
+## 3. Three.js-dependent source tests
 
-### Experience grammar
+Two test files import the pinned `three` package directly:
 
-- brand text limits;
-- valid accent and theme enums;
-- player-control booleans;
-- intro / outro sanitation;
-- HTTP(S) and relative delivery URLs;
-- image data-URL format validation;
-- decoded logo-size budget.
+- `tests/camera-framing.test.mjs`;
+- `tests/material-diagnostics.test.mjs`.
 
-### Experience package
+They cover:
 
-- `PVISSHOW1` magic;
-- container version;
-- schema-10 published project;
-- experience schema 1;
-- raw GLB byte preservation;
-- asset metadata;
-- binary decode and migration;
-- published runtime normalization.
+### Camera and bounds
 
-The included `foundation-cube.glb` is encoded and decoded through the production experience codec and compared byte-for-byte.
+- eight-corner aspect-aware fitting;
+- wide-product fitting in portrait viewports;
+- finite near/far clipping;
+- robust framing-metric preference;
+- invalid-box rejection;
+- malformed outlier-vertex trimming.
 
-### Experience runtime
+### Surface policy
 
-- Editor → Intro → Active → Outro → Editor;
-- direct-entry behavior;
-- story-state synchronization;
-- deterministic exit.
+- stable unique-material diagnostics;
+- imported Front / Double / Flip labels;
+- transparent depth-writing risk;
+- safe thin-shell suggestion behavior;
+- transparent/glass exclusion from blanket repair;
+- suggestion identity restoration;
+- Auto restoring the imported side;
+- manual Double surviving helper disable.
 
-### AR handoff
-
-- Android HTTPS GLB requirement;
-- Android Scene Viewer intent generation;
-- Android web fallback generation;
-- Apple HTTPS USDZ requirement;
-- Apple Quick Look target resolution;
-- unsupported-platform fallback behavior.
-
-### Presentation-frame layout
-
-- NDC-to-output mapping;
-- Match padding awareness;
-- bounded safe areas;
-- infographic card sizing.
-
-### Architecture gate
-
-The suite confirms that V2:
-
-- imports the new presentation modules;
-- keeps one renderer;
-- exposes the Publish workspace;
-- provides a read-only presentation shell;
-- retains the quick dock;
-- avoids a timeline panel;
-- publishes schema 10.
+These files were syntax-checked but could not execute in this delivery environment because `node_modules` was absent and npm DNS resolution returned `EAI_AGAIN`. They are therefore recorded as **not executed**, not as passing or failing.
 
 ---
 
-## 3. Browser smoke coverage added
+## 4. Dependency and production-build boundary
 
-The Playwright source suite now contains a V2 scenario that:
+Dependency installation was attempted with the pinned package contract. The environment could not resolve `registry.npmjs.org`, so Vite, Three.js and Playwright were not installed locally.
 
-1. boots the demo project;
-2. snapshots the authoring project;
-3. enters Presentation Mode from the top-level Present action;
-4. verifies the editor shell and quick dock are hidden;
-5. verifies the branded intro is visible;
-6. starts the experience;
-7. verifies active read-only navigation;
-8. confirms schema 10 and active runtime state;
-9. exits presentation mode;
-10. confirms the editor shell returns;
-11. compares model, studio and camera state with the pre-preview snapshot.
-
-This browser scenario is included but was not executed in this sandbox because the pinned Playwright/Vite packages could not be installed.
-
----
-
-## 4. Production-build attempt
-
-Command:
-
-```bash
-npm run build
-```
-
-Result:
-
-```text
-> product-vis@2.0.0 build
-> vite build
-
-sh: 1: vite: not found
-```
-
-Dependency installation was attempted. The sandbox package mirror returned:
-
-```text
-404 Not Found — @playwright/test@1.62.0
-```
-
-The absence of installed dependencies means this report does **not** claim:
+This report does **not** claim:
 
 - a completed Vite production bundle;
-- a running WebGL browser session;
-- executed Playwright Chromium checks;
-- visual screenshot acceptance on physical devices.
+- an executed WebGL browser session;
+- Playwright Chromium acceptance;
+- screenshots from the modified local build;
+- physical-device rendering acceptance.
 
-This limitation is recorded explicitly rather than inferred as a pass.
+The source package remains ready for the connected gate below.
 
 ---
 
@@ -179,78 +133,49 @@ npx playwright install chromium
 npm run test:smoke
 ```
 
-`npm run check` executes the 83-test source suite before Vite bundles the application.
+`npm run check` executes the complete unit/architecture suite before Vite builds the application.
 
 ---
 
-## 6. Required connected visual checks
+## 6. Required representative-model checks
 
-### Desktop editor / player
+The compact repository contains only the `foundation-cube.glb` fixture. It does not contain the Honda or Lamborghini production assets mentioned in the V2.1A brief.
 
-- import a representative GLB;
-- author at least one variant, infographic and story;
-- configure brand and intro;
-- enter Presentation Mode;
-- verify the authoring interface is absent;
-- start, pause, navigate, finish and restart the story;
-- exit and verify authoring state restoration.
+Use both representative automotive GLBs for final acceptance:
 
-### Package round-trip
+### Camera
 
-- publish `.productvis-show`;
-- reload the app;
-- open the package from Project → Open Experience;
-- verify model, brand, variants, graphics and story;
-- verify it opens directly as a read-only experience.
+1. Hero frames the complete visible vehicle.
+2. Front and Side preserve a useful product scale.
+3. Top does not zoom to an empty canvas.
+4. Detail remains bounded and finite.
+5. Fit works after import, scale, rotation and centering.
+6. Hiding parts or applying a visibility variant refreshes the next preset.
+7. Exploded states are not mistaken for malformed outliers.
+8. Near/far clipping does not cut the vehicle interior or place the camera inside the product.
 
-### Remote package
+### Materials
 
-- host the package at HTTPS;
-- confirm a same-origin player URL boots it;
-- confirm a cross-origin URL works only when the package server allows the player origin;
-- confirm malformed / missing package URLs fail safely.
+1. Auto matches every imported glTF side setting.
+2. Double repairs intentional thin/open panels individually.
+3. Flip repairs genuinely inverted surfaces without changing unrelated materials.
+4. Suggested repair never forces glass or transmission materials to Double.
+5. Transparent depth-writing risks appear in diagnostics.
+6. Manual overrides survive `.productvis` save/open.
+7. Manual overrides survive presentation-state capture/apply.
+8. Disabling suggestions restores only suggested materials.
 
-### Branded export
+### Identity and responsive shell
 
-For viewport, 1920×1080 and 2160×2700:
-
-- clean Match;
-- clean Fill;
-- presentation Match;
-- presentation Fill;
-- brand only;
-- brand + infographic;
-- brand + story caption.
-
-Confirm projected anchors remain attached after padding and crop.
-
-### Mobile
-
-- iPhone Safari read-only player;
-- Android Chrome read-only player;
-- mobile intro / navigation / outro spacing;
-- orientation change;
-- fullscreen fallback behavior;
-- file-share fallback;
-- AR target launch with real hosted assets.
+1. Memento remains pure white and sharp.
+2. The wordmark does not stretch or clip.
+3. `PRODUCT VIS` remains a subordinate product label.
+4. The top bar remains usable at desktop and mobile breakpoints.
 
 ---
 
-## 7. Known delivery boundaries
+## 7. V2.1A conclusion
 
-- PRODUCT VIS packages experiences; it does not host them.
-- Remote package boot requires network reachability and compatible CORS.
-- Native file sharing varies by browser and platform; download is the fallback.
-- Android AR requires a hosted HTTPS GLB.
-- Apple AR requires a hosted HTTPS USDZ.
-- V2 does not include client-side USDZ conversion.
-- No cloud account, analytics, access control or URL-shortening service is included.
-- QR publishing remains a delivery-service concern rather than a renderer-core concern.
+The available deterministic source gate passes: syntax, architecture, dependency-free behavior, persistence contracts and compact-repository structure are intact.
 
----
-
-## 8. Validation conclusion
-
-The V2 source architecture, state model, binary package format, export mapping, sharing fallback and AR target contracts pass the available deterministic checks.
-
-Final acceptance still requires the connected Vite/Playwright/WebGL gate and real-device AR verification described above.
+Final release acceptance still depends on the connected dependency/build/browser gate and visual testing with the representative Honda and Lamborghini GLBs.

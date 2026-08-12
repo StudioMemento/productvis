@@ -18,7 +18,7 @@ function hasHint(tokens, hints) {
 
 export function materialSideName(side) {
   if (side === 2) return 'double';
-  if (side === 1) return 'back';
+  if (side === 1) return 'flip';
   return 'front';
 }
 
@@ -27,7 +27,7 @@ function classifyMaterial(mesh, material, materialId) {
   const alphaTest = Number(material?.alphaTest || 0);
   const opacity = Number(material?.opacity ?? 1);
   const transmission = Number(material?.transmission || 0);
-  const transparent = Boolean(material?.transparent) || opacity < 0.999;
+  const transparent = Boolean(material?.transparent) || opacity < 0.999 || transmission > 0.001;
   const alphaMasked = alphaTest > 0.001;
   const alphaBlended = transparent && !alphaMasked && transmission <= 0.001;
   const originalSide = materialSideName(material?.side);
@@ -35,12 +35,27 @@ function classifyMaterial(mesh, material, materialId) {
   const glassLike = transmission > 0.001 || hasHint(tokens, GLASS_HINTS);
   const thinShellLike = alphaMasked || hasHint(tokens, THIN_SHELL_HINTS);
   const safeBackfaceCandidate = !doubleSided && thinShellLike && !glassLike;
+  const depthWrite = material?.depthWrite !== false;
+  const depthTest = material?.depthTest !== false;
+  const transparentDepthRisk = (alphaBlended || glassLike) && depthWrite;
+  const transparentDoubleSided = (alphaBlended || glassLike) && doubleSided;
+  const flipAuthored = originalSide === 'flip';
+  const alphaMode = transmission > 0.001
+    ? 'transmission'
+    : alphaMasked
+      ? 'mask'
+      : alphaBlended
+        ? 'blend'
+        : 'opaque';
 
   const issues = [];
   if (doubleSided) issues.push('double-sided');
+  if (flipAuthored) issues.push('imported-flip');
   if (alphaMasked) issues.push('alpha-mask');
   if (alphaBlended) issues.push('alpha-blend');
   if (glassLike) issues.push('glass');
+  if (transparentDepthRisk) issues.push('depth-write-risk');
+  if (transparentDoubleSided) issues.push('transparent-double');
   if (safeBackfaceCandidate) issues.push('backface-candidate');
 
   return {
@@ -48,12 +63,20 @@ function classifyMaterial(mesh, material, materialId) {
     meshName: mesh?.name || 'Mesh',
     materialName: material?.name || `Material ${materialId}`,
     originalSide,
+    alphaMode,
+    opacity,
+    transmission,
     transparent,
     alphaMasked,
     alphaBlended,
     doubleSided,
+    flipAuthored,
     glassLike,
     thinShellLike,
+    depthWrite,
+    depthTest,
+    transparentDepthRisk,
+    transparentDoubleSided,
     safeBackfaceCandidate,
     issues,
     recommendedSide: safeBackfaceCandidate ? 'double' : originalSide,
@@ -69,6 +92,8 @@ export function analyzeMaterialDiagnostics(asset, { forEachMaterial } = {}) {
       transparent: 0,
       alphaMasked: 0,
       alphaBlended: 0,
+      depthWriteRisks: 0,
+      transparentDoubleSided: 0,
       glass: 0,
       backfaceCandidates: 0,
       health: 'safe',
@@ -107,6 +132,8 @@ export function analyzeMaterialDiagnostics(asset, { forEachMaterial } = {}) {
     transparent: materials.filter((item) => item.transparent).length,
     alphaMasked: materials.filter((item) => item.alphaMasked).length,
     alphaBlended: materials.filter((item) => item.alphaBlended).length,
+    depthWriteRisks: materials.filter((item) => item.transparentDepthRisk).length,
+    transparentDoubleSided: materials.filter((item) => item.transparentDoubleSided).length,
     glass: materials.filter((item) => item.glassLike).length,
     backfaceCandidates: materials.filter((item) => item.safeBackfaceCandidate).length,
     health: 'safe',
@@ -121,6 +148,10 @@ export function analyzeMaterialDiagnostics(asset, { forEachMaterial } = {}) {
   if (summary.alphaBlended > 0 || summary.glass > 0) {
     if (summary.health === 'safe') summary.health = 'watch';
     summary.notes.push('Transparent and glass materials are reported for review but are not forced double-sided.');
+  }
+  if (summary.depthWriteRisks > 0) {
+    if (summary.health === 'safe') summary.health = 'watch';
+    summary.notes.unshift('Transparent depth-writing materials may show sorting artifacts; review them separately from side policy.');
   }
   if (summary.health === 'safe') {
     summary.notes.push('No backface-sensitive materials were detected.');

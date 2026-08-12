@@ -72,11 +72,12 @@ export const DEFAULT_GROUND_OFFSET = 0;
 export const DEFAULT_CAMERA_TARGET = Object.freeze({ x: 0, y: 0.47, z: 0 });
 
 export const CAMERA_PRESETS = Object.freeze({
-  hero: Object.freeze({ direction: [1.12, 0.45, 1.65], distance: 0.9, target: DEFAULT_CAMERA_TARGET }),
-  front: Object.freeze({ direction: [0, 0.18, 1], distance: 0.94, target: Object.freeze({ x: 0, y: 0.48, z: 0 }) }),
-  side: Object.freeze({ direction: [1, 0.2, 0], distance: 0.96, target: Object.freeze({ x: 0, y: 0.48, z: 0 }) }),
-  top: Object.freeze({ direction: [0.32, 1, 0.34], distance: 1.02, target: Object.freeze({ x: 0, y: 0.42, z: 0 }) }),
-  detail: Object.freeze({ direction: [0.9, 0.34, 1.25], distance: 0.62, target: Object.freeze({ x: 0, y: 0.65, z: 0 }) }),
+  hero: Object.freeze({ direction: [1.12, 0.45, 1.65], distance: 1, padding: 1.08, target: DEFAULT_CAMERA_TARGET }),
+  front: Object.freeze({ direction: [0, 0.18, 1], distance: 1, padding: 1.06, target: Object.freeze({ x: 0, y: 0.48, z: 0 }) }),
+  side: Object.freeze({ direction: [1, 0.2, 0], distance: 1, padding: 1.06, target: Object.freeze({ x: 0, y: 0.48, z: 0 }) }),
+  // A slight forward/right offset avoids the OrbitControls pole at a perfect 90° top view.
+  top: Object.freeze({ direction: [0.18, 1, 0.2], distance: 1, padding: 1.08, target: Object.freeze({ x: 0, y: 0.42, z: 0 }) }),
+  detail: Object.freeze({ direction: [0.9, 0.34, 1.25], distance: 0.68, padding: 1.04, target: Object.freeze({ x: 0, y: 0.65, z: 0 }) }),
 });
 
 export const QUALITY_PROFILES = Object.freeze({
@@ -125,6 +126,7 @@ export const DEFAULT_PROJECT_STATE = Object.freeze({
     positionXZ: Object.freeze({ x: 0, z: 0 }),
     backfaceRepairEnabled: false,
     materialSideOverrides: Object.freeze({}),
+    suggestedMaterialSideOverrideIds: Object.freeze([]),
   }),
   studio: Object.freeze({
     // `preset` remains a legacy alias for the active backdrop preset.

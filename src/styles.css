@@ -106,32 +106,21 @@ svg {
   letter-spacing: -0.02em;
 }
 
-.brand-mark {
-  width: 26px;
-  height: 26px;
+.memento-wordmark {
+  width: clamp(88px, 7.2vw, 116px);
+  height: auto;
   fill: currentColor;
   flex: none;
 }
 
-.brand-mark-accent {
-  fill: var(--accent);
-}
-
-.brand-copy {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  font-size: 12px;
-  letter-spacing: 0.13em;
-}
-
-.brand-copy strong {
-  font-weight: 720;
-}
-
-.brand-copy span {
+.brand-product-label {
+  padding-left: 10px;
+  border-left: 1px solid var(--line-strong);
   color: var(--muted);
-  font-weight: 520;
+  font-size: 9px;
+  font-weight: 680;
+  letter-spacing: .13em;
+  white-space: nowrap;
 }
 
 .model-status {
@@ -1895,14 +1884,13 @@ noscript {
     gap: 7px;
   }
 
-  .brand-mark {
-    width: 23px;
-    height: 23px;
+  .memento-wordmark {
+    width: 86px;
   }
 
-  .brand-copy {
-    font-size: 10px;
-    letter-spacing: .10em;
+  .brand-product-label {
+    padding-left: 7px;
+    font-size: 8px;
   }
 
   .top-actions {
@@ -2119,7 +2107,7 @@ noscript {
 }
 
 @media (max-width: 430px) {
-  .brand-copy span {
+  .brand-product-label {
     display: none;
   }
 
@@ -2740,7 +2728,7 @@ body.panel-open .viewport-hud-right {
 }
 
 @media (max-width: 470px) {
-  .brand-copy span {
+  .brand-product-label {
     display: none;
   }
 
@@ -3022,6 +3010,11 @@ body.panel-open .viewport-hud-right {
 .material-diagnostic-row.is-repaired {
   background: rgba(255,121,80,.055);
   box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.material-diagnostic-row.is-suggested {
+  background: rgba(255,255,255,.045);
+  box-shadow: inset 2px 0 0 rgba(255,255,255,.58);
 }
 
 .material-diagnostic-copy {

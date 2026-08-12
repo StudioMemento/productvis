@@ -32,6 +32,7 @@ test('foundation and V1.2 studio module boundaries exist', async () => {
     'src/studio/GroundSystem.js',
     'src/studio/ContactShadowRenderer.js',
     'src/camera/CameraRig.js',
+    'src/camera/CameraFraming.js',
     'src/motion/MotionController.js',
     'src/export/FrameExporter.js',
     'src/export/ExportFramePlan.js',
@@ -78,7 +79,7 @@ test('runtime source has no CDN dependency', async () => {
 
 test('render dependency and build tools are pinned', async () => {
   const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '2.0.0');
+  assert.equal(packageJson.version, '2.1.0-alpha.1');
   assert.equal(packageJson.dependencies.three, '0.185.1');
   assert.equal(packageJson.devDependencies.vite, '7.3.5');
   assert.doesNotMatch(packageJson.dependencies.three, /^[~^]/);
@@ -183,6 +184,7 @@ test('V1.3 adds camera safety controls and targeted material diagnostics', async
   assert.match(html, /id="backfaceRepairToggle"/);
   assert.match(html, /id="cameraModeValue"/);
   assert.match(html, /id="diagBackfaceCandidates"/);
+  assert.match(html, /id="diagDepthRisks"/);
   assert.match(controller, /setInspectMode/);
   assert.match(controller, /setBackfaceRepair/);
   assert.match(controller, /store\.patch\('project\.camera', \{ mode, target \}/);
@@ -191,8 +193,13 @@ test('V1.3 adds camera safety controls and targeted material diagnostics', async
   assert.match(camera, /inspect/);
   assert.match(camera, /enforceSafety/);
   assert.match(camera, /updateClipping/);
+  assert.match(camera, /computeFitDistanceToBounds/);
+  assert.match(camera, /refresh: true/);
   assert.match(product, /backfaceRepairEnabled/);
   assert.match(product, /applyMaterialPresentation/);
+  assert.match(product, /override === 'auto'.*originalSide/s);
+  assert.match(product, /getSuggestedMaterialSideOverrideIds/);
+  assert.match(controller, /suggestedMaterialSideOverrideIds/);
   assert.match(diagnostics, /safeBackfaceCandidate/);
   assert.match(diagnostics, /Transparent and glass materials are reported for review/);
   assert.doesNotMatch(product, /DoubleSide\)\s*;\s*this\.sessionRoot\?\.traverse\(/);
@@ -283,7 +290,7 @@ test('V1.5 Advanced exposes one state model and deterministic group resets', asy
   assert.match(presets, /materialSideOverrides/);
   assert.match(presets, /groundOffset/);
   assert.match(presets, /target:\s*DEFAULT_CAMERA_TARGET/);
-  assert.match(main, /v2\-branded-presentation-mode/);
+  assert.match(main, /v2\-1a\-stability/);
 });
 
 
@@ -671,7 +678,7 @@ test('V1.9 adds controlled product stories without introducing a timeline editor
   assert.match(styles, /\.story-transport/);
   assert.match(styles, /\.story-step-card/);
   assert.doesNotMatch(exporter, /storyTransport|story-transport|story-step-card/);
-  assert.match(main, /v2\-branded-presentation-mode/);
+  assert.match(main, /v2\-1a\-stability/);
 });
 
 test('V2 publishes the canonical project into a branded read-only experience without adding a second renderer', async () => {
@@ -701,7 +708,7 @@ test('V2 publishes the canonical project into a branded read-only experience wit
   assert.match(html, /data-panel-page="publish"/);
   assert.match(html, /data-export-presentation="1920x1080"/);
   assert.match(html, /\.productvis-show/);
-  assert.match(main, /v2-branded-presentation-mode/);
+  assert.match(main, /v2-1a-stability/);
 
   assert.match(controller, /ExperienceRuntime/);
   assert.match(controller, /PresentationFrameComposer/);

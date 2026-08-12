@@ -25,7 +25,7 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => (
     window.__PRODUCT_VIS__?.store?.get('session.status') === 'ready'
   ));
-  await expect(page.locator('html')).toHaveAttribute('data-product-vis-build', 'v2-branded-presentation-mode');
+  await expect(page.locator('html')).toHaveAttribute('data-product-vis-build', 'v2-1a-stability');
   await expect(page.locator('#modelName')).toHaveText('Demo Object');
   await expect(page.locator('#viewport')).toBeVisible();
 });
@@ -450,7 +450,7 @@ test('support report downloads local diagnostics without embedding asset bytes',
   expect(path).toBeTruthy();
 
   const report = JSON.parse(await readFile(path, 'utf8'));
-  expect(report.appVersion).toBe('2.0.0');
+  expect(report.appVersion).toBe('2.1.0-alpha.1');
   expect(report.project.schemaVersion).toBe(10);
   expect(report).not.toHaveProperty('assetBytes');
   expect(JSON.stringify(report)).not.toContain('data:application/octet-stream');

@@ -3,6 +3,7 @@ import { forEachMaterial } from '../utils/materials.js';
 import { easeInOutCubic } from '../utils/math.js';
 import { CONTACT_SHADOW_LAYER } from '../config/runtime.js';
 import { analyzeMaterialDiagnostics, materialSideName } from './MaterialDiagnostics.js';
+import { computeVisibleBounds, isFiniteBounds } from './VisibleBounds.js';
 import { ProductStructure } from '../structure/ProductStructure.js';
 import { ProductVariants } from '../configurator/ProductVariants.js';
 import { ProductExplosion } from '../story/ProductExplosion.js';
@@ -32,13 +33,18 @@ export class ProductSession {
     this.userPositionXZ = { x: 0, z: 0 };
     this.groundY = 0;
     this.modelRadius = 1.8;
+    this.framingRadius = 1.8;
     this.modelHeight = 3;
     this.modelBounds = new THREE.Box3();
+    this.framingBounds = new THREE.Box3();
+    this.boundsValid = false;
+    this.boundsReport = null;
     this.shadowsEnabled = true;
     this.materialMode = 'original';
     this.transformTween = null;
     this.backfaceRepairEnabled = false;
     this.materialSideOverrides = new Map();
+    this.suggestedSideOverrideIds = new Set();
     this.variantAppearanceByMesh = {};
     this.variantMaterialInstances = new Set();
     this.materialDiagnostics = {
@@ -48,6 +54,8 @@ export class ProductSession {
       transparent: 0,
       alphaMasked: 0,
       alphaBlended: 0,
+      depthWriteRisks: 0,
+      transparentDoubleSided: 0,
       glass: 0,
       backfaceCandidates: 0,
       health: 'safe',
@@ -149,6 +157,7 @@ export class ProductSession {
     this.transformTween = null;
     this.backfaceRepairEnabled = false;
     this.materialSideOverrides.clear();
+    this.suggestedSideOverrideIds.clear();
     this.variantAppearanceByMesh = {};
 
     this.scene.add(this.sessionRoot);
@@ -199,8 +208,24 @@ export class ProductSession {
     this.materialDiagnostics = analyzeMaterialDiagnostics(asset, { forEachMaterial });
 
     asset.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(asset);
-    if (box.isEmpty()) throw new Error('The model bounds are empty.');
+    const initialBounds = computeVisibleBounds(asset, {
+      allowRobustTrim: true,
+      isVisible: (object) => {
+        let current = object;
+        while (current) {
+          if (current.visible === false) return false;
+          if (current === asset) return true;
+          current = current.parent;
+        }
+        return false;
+      },
+    });
+    // A single malformed export vertex can otherwise normalize the real product
+    // down to a speck before the camera even gets a chance to frame it. Use the
+    // robust core only for extreme outliers; retain exact bounds for normal assets.
+    const useRobustNormalization = initialBounds.robustTrimmed && initialBounds.outlierRatio >= 8;
+    const box = (useRobustNormalization ? initialBounds.framingBounds : initialBounds.fullBounds).clone();
+    if (!isFiniteBounds(box)) throw new Error('The model bounds are empty or invalid.');
 
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
@@ -211,7 +236,13 @@ export class ProductSession {
 
     const normalizedSize = 3.15;
     const scale = normalizedSize / maxDimension;
-    return { box, center, scale };
+    return {
+      box,
+      center,
+      scale,
+      boundsSource: useRobustNormalization ? 'robust-core' : 'full',
+      outlierRatio: initialBounds.outlierRatio,
+    };
   }
 
   #createRig(asset, normalization) {
@@ -313,19 +344,33 @@ export class ProductSession {
     };
   }
 
-  updateBounds({ updateShadowScale = true } = {}) {
+  updateBounds({ updateShadowScale = true, notify = true } = {}) {
     if (!this.sessionRoot) return null;
     this.sessionRoot.updateMatrixWorld(true);
-    const visibleBounds = this.structure.getVisibleBounds(new THREE.Box3());
-    if (!visibleBounds.isEmpty()) this.modelBounds.copy(visibleBounds);
+    const explosionOffsets = this.explosion?.getState?.().explodeOffsets || {};
+    const boundsReport = this.structure.getVisibleBoundsReport({
+      allowRobustTrim: Object.keys(explosionOffsets).length === 0 && !this.explosion?.isDynamic?.(),
+    });
+    const visibleBounds = boundsReport.fullBounds;
+    if (isFiniteBounds(visibleBounds)) this.modelBounds.copy(visibleBounds);
     else this.modelBounds.setFromObject(this.sessionRoot, true);
+    if (isFiniteBounds(boundsReport.framingBounds)) this.framingBounds.copy(boundsReport.framingBounds);
+    else this.framingBounds.copy(this.modelBounds);
     const size = this.modelBounds.getSize(new THREE.Vector3());
     const sphere = this.modelBounds.getBoundingSphere(new THREE.Sphere());
+    const framingSphere = this.framingBounds.getBoundingSphere(new THREE.Sphere());
     this.modelRadius = Math.max(sphere.radius, 0.4);
+    this.framingRadius = Math.max(framingSphere.radius, 0.4);
     this.modelHeight = Math.max(size.y, 0.5);
+    this.boundsValid = isFiniteBounds(this.modelBounds) && isFiniteBounds(this.framingBounds);
+    this.boundsReport = {
+      ...boundsReport,
+      fullBounds: undefined,
+      framingBounds: undefined,
+    };
 
     const metrics = this.getMetrics();
-    this.onBoundsChanged?.(metrics, { updateShadowScale });
+    if (notify) this.onBoundsChanged?.(metrics, { updateShadowScale });
     return metrics;
   }
 
@@ -334,6 +379,11 @@ export class ProductSession {
       root: this.sessionRoot,
       bounds: this.modelBounds,
       radius: this.modelRadius,
+      framingBounds: this.framingBounds,
+      framingRadius: this.framingRadius,
+      framingSource: this.boundsReport?.source || 'full',
+      boundsValid: this.boundsValid,
+      boundsReport: this.boundsReport,
       height: this.modelHeight,
     };
   }
@@ -509,13 +559,10 @@ export class ProductSession {
     const diagnosticId = String(originalMaterial?.userData?.pvDiagnosticId ?? '');
     const override = this.materialSideOverrides.get(diagnosticId) || 'auto';
 
-    if (override === 'original') return originalSide;
+    if (override === 'auto' || override === 'original') return originalSide;
     if (override === 'front') return THREE.FrontSide;
-    if (override === 'back') return THREE.BackSide;
+    if (override === 'flip' || override === 'back') return THREE.BackSide;
     if (override === 'double') return THREE.DoubleSide;
-
-    const candidate = Boolean(originalMaterial?.userData?.pvBackfaceCandidate);
-    if (this.backfaceRepairEnabled && candidate) return THREE.DoubleSide;
     return originalSide;
   }
 
@@ -579,41 +626,87 @@ export class ProductSession {
   }
 
   setBackfaceRepairEnabled(enabled) {
-    this.backfaceRepairEnabled = Boolean(enabled);
+    const next = Boolean(enabled);
+    if (next) {
+      this.materialDiagnostics.materials.forEach((item) => {
+        const id = String(item.id);
+        if (!item.safeBackfaceCandidate || this.materialSideOverrides.has(id)) return;
+        this.materialSideOverrides.set(id, 'double');
+        this.suggestedSideOverrideIds.add(id);
+      });
+    } else {
+      this.suggestedSideOverrideIds.forEach((id) => {
+        if (this.materialSideOverrides.get(id) === 'double') this.materialSideOverrides.delete(id);
+      });
+      this.suggestedSideOverrideIds.clear();
+    }
+    this.backfaceRepairEnabled = next;
     this.applyMaterialPresentation();
     return this.backfaceRepairEnabled;
   }
 
   setMaterialSideOverride(materialId, mode) {
     const id = String(materialId);
-    const allowed = new Set(['auto', 'original', 'front', 'back', 'double']);
-    if (!allowed.has(mode)) return false;
-    const exists = this.materialDiagnostics.materials.some((item) => String(item.id) === id);
-    if (!exists) return false;
-    if (mode === 'auto') this.materialSideOverrides.delete(id);
-    else this.materialSideOverrides.set(id, mode);
+    const normalizedMode = mode === 'back' ? 'flip' : mode === 'original' ? 'auto' : mode;
+    const allowed = new Set(['auto', 'front', 'flip', 'double']);
+    if (!allowed.has(normalizedMode)) return false;
+    const diagnostic = this.materialDiagnostics.materials.find((item) => String(item.id) === id);
+    if (!diagnostic) return false;
+    this.suggestedSideOverrideIds.delete(id);
+    if (normalizedMode === 'auto') {
+      // Auto is an explicit, portable user choice: it preserves the imported
+      // glTF side policy and remains an opt-out if suggestions are re-enabled.
+      this.materialSideOverrides.set(id, 'auto');
+    } else this.materialSideOverrides.set(id, normalizedMode);
     this.applyMaterialPresentation();
     return true;
   }
 
-  setMaterialSideOverrides(overrides = {}) {
+  setMaterialSideOverrides(overrides = {}, { suggestedIds = [] } = {}) {
     this.materialSideOverrides.clear();
+    this.suggestedSideOverrideIds.clear();
     Object.entries(overrides).forEach(([id, mode]) => {
-      if (['original', 'front', 'back', 'double'].includes(mode)) {
-        this.materialSideOverrides.set(String(id), mode);
+      const normalizedMode = mode === 'back' ? 'flip' : mode === 'original' ? 'auto' : mode;
+      if (['auto', 'front', 'flip', 'double'].includes(normalizedMode)) this.materialSideOverrides.set(String(id), normalizedMode);
+    });
+    const restoredSuggestions = new Set(
+      (Array.isArray(suggestedIds) ? suggestedIds : [])
+        .map((id) => String(id).replace(/[^0-9]/g, '').slice(0, 8))
+        .filter(Boolean),
+    );
+    this.materialDiagnostics.materials.forEach((item) => {
+      const id = String(item.id);
+      if (item.safeBackfaceCandidate
+        && this.materialSideOverrides.get(id) === 'double'
+        && restoredSuggestions.has(id)) {
+        this.suggestedSideOverrideIds.add(id);
       }
     });
+    if (this.backfaceRepairEnabled) {
+      this.materialDiagnostics.materials.forEach((item) => {
+        const id = String(item.id);
+        if (!item.safeBackfaceCandidate || this.materialSideOverrides.has(id)) return;
+        this.materialSideOverrides.set(id, 'double');
+        this.suggestedSideOverrideIds.add(id);
+      });
+    }
     this.applyMaterialPresentation();
     return this.getMaterialSideOverrides();
   }
 
   clearMaterialSideOverrides() {
     this.materialSideOverrides.clear();
+    this.suggestedSideOverrideIds.clear();
+    this.backfaceRepairEnabled = false;
     this.applyMaterialPresentation();
   }
 
   getMaterialSideOverrides() {
     return Object.fromEntries([...this.materialSideOverrides.entries()].sort(([a], [b]) => Number(a) - Number(b)));
+  }
+
+  getSuggestedMaterialSideOverrideIds() {
+    return [...this.suggestedSideOverrideIds].sort((a, b) => Number(a) - Number(b));
   }
 
   getMaterialDiagnostics() {
@@ -636,6 +729,7 @@ export class ProductSession {
         sideOverride,
         effectiveSide,
         repairActive: effectiveSide !== item.originalSide,
+        suggestedRepair: this.suggestedSideOverrideIds.has(id),
       };
     });
 
@@ -643,7 +737,9 @@ export class ProductSession {
       ...this.materialDiagnostics,
       materials,
       backfaceRepairEnabled: this.backfaceRepairEnabled,
-      manualOverrides: this.materialSideOverrides.size,
+      manualOverrides: Math.max(0, this.materialSideOverrides.size - this.suggestedSideOverrideIds.size),
+      totalOverrides: this.materialSideOverrides.size,
+      suggestedOverrides: this.suggestedSideOverrideIds.size,
       materialSideOverrides: this.getMaterialSideOverrides(),
     };
   }

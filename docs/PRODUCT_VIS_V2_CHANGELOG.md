@@ -1,5 +1,51 @@
 # PRODUCT VIS V2 — CHANGELOG
 
+## V2.1A — Stability pass
+
+### Added
+
+- Fresh visible-product bounds refresh for every camera preset and Fit action.
+- Aspect-aware box fitting against horizontal and vertical field of view.
+- Robust framing bounds for pathological outlier vertices.
+- Invalid-bounds rejection and camera bounds-source diagnostics.
+- Box-depth-derived near/far clipping.
+- Explicit material surface policies: Auto, Front, Double and Flip.
+- Suggested-repair identity persisted separately from manual overrides.
+- Transparent depth-writing and transparent double-sided diagnostics.
+- Alpha blend and depth-risk counters in the material inspector.
+- Pure-white, path-only Memento wordmark and matching favicon.
+- Camera framing and robust-bounds source tests.
+
+### Changed
+
+- Package version is now `2.1.0-alpha.1`.
+- Build marker is now `v2-1a-stability`.
+- Auto always preserves the imported material side and is a portable explicit choice.
+- The backface helper now writes targeted Double overrides instead of changing Auto behavior globally.
+- Disabling suggested repair removes only suggested Double overrides; manual choices survive.
+- Legacy `original` and `back` policies migrate to `auto` and `flip`.
+- Hero, Front, Side, Top and Detail derive position from current visible product bounds.
+- Top includes a small forward/right offset to avoid the orbit-control pole.
+- Product normalization can ignore an extreme malformed export vertex.
+
+### Preserved
+
+- Project schema 10 and experience schema 1.
+- V2 branded read-only presentation mode.
+- One renderer and one canonical project state.
+- Advanced closed by default.
+- Local-first import, persistence, recovery and export.
+- Existing variants, infographics, presentations and controlled stories.
+
+### Deferred to the next checkpoints
+
+- V2.1B persistent Light / Camera / Variants / Motion / Story shelf.
+- V2.1C double-click focus, bokeh, GFX annotations and Shot strip.
+- V2.1D semantic Material Sockets and texture-preserving configurator tint.
+- V2.1E optimized starter product and asset library.
+
+---
+
 ## Added
 
 ### Branded presentation mode

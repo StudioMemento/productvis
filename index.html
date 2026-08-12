@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#070809" />
   <meta name="description" content="Product VIS — author premium realtime product experiences, guided stories, branded presentation players and controlled AR handoffs directly in the browser." />
-  <meta name="product-vis-build" content="v2-branded-presentation-mode" />
-  <title>Product VIS V2 — Branded Realtime Product Experiences</title>
+  <meta name="product-vis-build" content="v2-1a-stability" />
+  <title>Product VIS V2.1A — Stable Realtime Product Experiences</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/src/styles.css" />
 
@@ -15,12 +15,11 @@
 <body>
   <div id="app" class="app-shell">
     <header class="topbar">
-      <a class="brand" href="#" aria-label="Product VIS home">
-        <svg class="brand-mark" viewBox="0 0 30 30" aria-hidden="true">
-          <path d="M4 4h12.4c5.7 0 9.6 3.5 9.6 8.7 0 5.3-3.9 8.8-9.6 8.8H10V26H4V4Zm6 5.2v7.2h5.8c2.6 0 4.1-1.3 4.1-3.6 0-2.3-1.5-3.6-4.1-3.6H10Z"/>
-          <path d="M18.3 21.5 22 26h-7.2l-3.6-4.5h7.1Z" class="brand-mark-accent"/>
+      <a class="brand" href="#" aria-label="Memento Product VIS home">
+        <svg class="memento-wordmark" viewBox="0 0 1600 100" role="img" aria-label="Memento">
+          <path d="M109.14 10.45v79.1l-7.91-7.91V28.91L69.58 60.55 37.94 28.91v52.73l-7.91 7.91v-79.1L69.58 50ZM596.08 10.45v79.1l-7.91-7.91V28.91l-31.65 31.64-31.64-31.64v52.73l-7.91 7.91v-79.1L556.52 50ZM1077.74 10.45v79.1l-60.65-60.64v52.74l-7.91 7.9v-79.1l60.66 60.64V18.36ZM344.7 81.64l7.91 7.91H273.5l7.91-7.91ZM297.23 46.05h31.64v7.91h-31.64ZM352.61 10.45l-7.91 7.91h-63.29l-7.91-7.91ZM831.64 81.64l7.91 7.91h-79.11l7.91-7.91ZM784.17 46.05h31.64v7.91h-31.64ZM839.55 10.45l-7.91 7.91h-63.29l-7.91-7.91ZM1247.38 10.45h79.11l-7.92 7.91h-27.69v71.19l-7.9-7.91V18.36h-27.69ZM1530.42 10.45c-21.85 0-39.56 17.71-39.56 39.55 0 21.85 17.71 39.55 39.55 39.55 21.85 0 39.55-17.7 39.55-39.55 0-21.84-17.7-39.55-39.55-39.55Zm0 71.2c-17.47 0-31.64-14.17-31.64-31.65 0-17.47 14.17-31.64 31.64-31.64 17.48 0 31.64 14.17 31.64 31.64 0 17.48-14.16 31.64-31.64 31.65Z"/>
         </svg>
-        <span class="brand-copy"><strong>PRODUCT</strong><span>VIS</span></span>
+        <span class="brand-product-label">PRODUCT VIS</span>
       </a>
 
       <div class="model-status" aria-live="polite">
@@ -493,15 +492,17 @@
               <dl class="diagnostic-grid">
                 <div><dt>Transparent</dt><dd id="diagTransparent">0</dd></div>
                 <div><dt>Alpha mask</dt><dd id="diagAlphaMasked">0</dd></div>
+                <div><dt>Alpha blend</dt><dd id="diagAlphaBlended">0</dd></div>
                 <div><dt>Glass</dt><dd id="diagGlass">0</dd></div>
                 <div><dt>Double-sided</dt><dd id="diagDoubleSided">0</dd></div>
+                <div><dt>Depth risk</dt><dd id="diagDepthRisks">0</dd></div>
                 <div><dt>Repair candidates</dt><dd id="diagBackfaceCandidates">0</dd></div>
               </dl>
               <label class="toggle-row diagnostics-toggle-row">
-                <span><b>Auto-repair safe candidates</b><small>Never blanket-applies to glass</small></span>
+                <span><b>Apply suggested Double repairs</b><small>Writes explicit overrides; glass remains untouched</small></span>
                 <input id="backfaceRepairToggle" type="checkbox" /><i></i>
               </label>
-              <p id="diagNotes" class="diagnostic-note">Opaque materials remain unchanged. Glass is reported but not forced double-sided.</p>
+              <p id="diagNotes" class="diagnostic-note">Auto preserves the imported glTF side policy. Transparent depth issues are diagnosed separately.</p>
             </div>
 
             <div class="control-group material-list-card">
