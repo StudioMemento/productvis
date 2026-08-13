@@ -1,27 +1,19 @@
 {
-  "name": "product-vis",
-  "version": "2.1.0-alpha.1",
+  "name": "product-vis-v2-1b",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
-  "description": "A local-first realtime product visualizer with branded read-only presentations, guided product stories, portable experience packages, composited output, and controlled AR handoff.",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview",
-    "test": "npm run test:unit",
-    "test:unit": "node --test tests/store.test.mjs tests/studio.test.mjs tests/camera-framing.test.mjs tests/material-diagnostics.test.mjs tests/preflight.test.mjs tests/performance.test.mjs tests/recovery.test.mjs tests/structure.test.mjs tests/variants.test.mjs tests/persistence.test.mjs tests/export.test.mjs tests/architecture.test.mjs tests/infographics.test.mjs tests/presentations.test.mjs tests/stories.test.mjs tests/experience.test.mjs",
-    "test:smoke": "playwright test",
-    "check": "npm run test:unit && npm run build"
+    "check": "node scripts/check.mjs && vite build",
+    "test:smoke": "node scripts/smoke.mjs",
+    "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "three": "0.185.1"
+    "three": "^0.170.0"
   },
   "devDependencies": {
-    "@playwright/test": "1.62.0",
-    "vite": "7.3.5"
-  },
-  "engines": {
-    "node": "^20.19.0 || >=22.12.0"
-  },
-  "packageManager": "npm@10.9.2"
+    "vite": "^5.4.10"
+  }
 }

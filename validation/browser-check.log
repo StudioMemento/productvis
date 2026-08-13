@@ -1,0 +1,2 @@
+./scripts/browser-check.sh: line 9: agent-browser: command not found
+./scripts/browser-check.sh: line 10: agent-browser: command not found

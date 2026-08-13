@@ -1,0 +1,6 @@
+
+> product-vis-v2-1b@2.1.0 check
+> node scripts/check.mjs && vite build
+
+Product VIS V2.1B static check passed · 22 deployable source files · starter model local.
+sh: 1: vite: not found
