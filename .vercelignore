@@ -1,0 +1,12 @@
+.git
+.openai
+.sites-runtime
+.sites-checkout*
+node_modules
+dist
+worker
+tests
+design-qa.md
+AGENTS.md
+*.tar.gz
+*.zip

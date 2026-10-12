@@ -1,89 +1,14 @@
 <!doctype html>
-<html lang="en">
+<html lang="it">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#08090b" />
-    <meta name="description" content="Product VIS V2.1B — realtime product visualization studio" />
-    <link rel="preload" href="/models/2015-rocket-bunny-honda-nsx.glb" as="fetch" crossorigin="anonymous" fetchpriority="high" />
-    <title>Product VIS V2.1B</title>
+    <meta name="theme-color" content="#101216" />
+    <meta name="description" content="ProductVis — esplora il tuo prodotto in uno studio 3D." />
+    <title>ProductVis — Studio</title>
   </head>
   <body>
-    <div id="app">
-      <div id="stage-background" aria-hidden="true"></div>
-      <header class="topbar" data-ui>
-        <div class="brand-lockup">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <div>
-            <strong>PRODUCT VIS</strong>
-            <span>V2.1B · GLOBAL STUDIO</span>
-          </div>
-        </div>
-        <div id="model-status" class="model-status" role="status">Starting studio…</div>
-        <nav class="top-actions" aria-label="Project actions">
-          <button id="import-model" class="primary-action" type="button">Replace model / Import your GLB</button>
-          <button id="load-starter" type="button">Load starter model</button>
-          <button id="save-project" type="button">Save project</button>
-          <button id="open-project" type="button">Open project</button>
-          <button id="save-presentation" type="button">Save presentation</button>
-          <button id="open-presentation" type="button">Open presentation</button>
-          <button id="reset-studio" type="button">Reset</button>
-          <button id="advanced-toggle" class="advanced-toggle" type="button" aria-expanded="false">Advanced</button>
-        </nav>
-        <input id="model-file" type="file" accept=".glb,model/gltf-binary" hidden />
-      </header>
-
-      <main id="viewport-shell">
-        <canvas id="viewport" aria-label="Interactive 3D product viewport"></canvas>
-        <div id="empty-state" class="empty-state" hidden data-ui>
-          <span>NO PRODUCT LOADED</span>
-          <strong>Bring a product into the studio.</strong>
-          <div>
-            <button id="empty-load-starter" type="button">Load starter model</button>
-            <button id="empty-import" type="button">Import your GLB</button>
-          </div>
-        </div>
-        <div id="viewport-hint" class="viewport-hint" data-ui>
-          <span>Double-click / double-tap a surface to focus</span>
-          <span>Drag to orbit · wheel/pinch to zoom</span>
-        </div>
-        <div id="focus-readout" class="focus-readout" hidden data-ui></div>
-        <div id="native-clip-badge" class="native-clip-badge" hidden data-ui></div>
-      </main>
-
-      <section id="studio-panel" class="studio-panel" data-ui aria-live="polite" hidden></section>
-
-      <nav id="global-studio" class="global-studio" aria-label="Global Studio" data-ui>
-        <div class="global-label">
-          <span>GLOBAL</span>
-          <strong>STUDIO</strong>
-        </div>
-        <button type="button" data-studio="camera" aria-pressed="false"><span>01</span>Camera</button>
-        <button type="button" data-studio="lighting" aria-pressed="false"><span>02</span>Lighting</button>
-        <button type="button" data-studio="stage" aria-pressed="false"><span>03</span>Stage</button>
-        <button type="button" data-studio="configurator" aria-pressed="false"><span>04</span>Configurator</button>
-        <button type="button" data-studio="animation" aria-pressed="false"><span>05</span>Animation</button>
-      </nav>
-
-      <aside id="advanced-panel" class="advanced-panel" data-ui aria-hidden="true">
-        <div class="advanced-head">
-          <div><span>PRECISION</span><strong>Advanced</strong></div>
-          <button id="advanced-close" type="button" aria-label="Close advanced panel">Close</button>
-        </div>
-        <div id="advanced-content" class="advanced-content"></div>
-      </aside>
-
-      <div id="loading-overlay" class="loading-overlay" role="status" aria-live="polite">
-        <div class="loading-card">
-          <div class="loading-kicker">BUNDLED STARTER MODEL</div>
-          <strong>2015 Rocket Bunny Honda NSX</strong>
-          <div class="loading-track"><i id="loading-bar"></i></div>
-          <div class="loading-meta"><span id="loading-label">Requesting local GLB…</span><b id="loading-percent">0%</b></div>
-          <small>The application shell is ready. The real product is loading directly—no proxy swap.</small>
-        </div>
-      </div>
-      <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    </div>
-    <script type="module" src="/src/main.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
