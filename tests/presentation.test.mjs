@@ -51,7 +51,7 @@ test('random does not recolor transparent surfaces, glass, lights or unknown sel
   }
 });
 
-test('random clears stale focus and motion and cannot repeat a setup at RNG endpoints', () => {
+test('random clears stale focus, changes motion and cannot repeat a setup at RNG endpoints', () => {
   for (const value of [0, 1 - Number.EPSILON]) {
     let state = setup();
     state.camera.focusPoint = [1, 2, 3]; state.camera.autoFocus = false;
@@ -59,9 +59,11 @@ test('random clears stale focus and motion and cannot repeat a setup at RNG endp
     for (let i = 0; i < 8; i++) {
       const next = randomizePresentation(state, metadata, { delta: 100, random: () => value });
       assert.notEqual(next.scene.preset, state.scene.preset);
-      assert.equal(next.motion.preset, 'still'); assert.equal(next.motion.playing, false);
+      assert.notEqual(next.motion.preset,state.motion.preset); assert.equal(next.motion.playing,true);
       assert.equal(next.camera.autoFocus, true); assert.equal(next.camera.focusPoint, null);
-      assert.notEqual(next.camera.preset, 'macro');
+      assert.notEqual(next.camera.preset, state.camera.preset);
+      assert.notEqual(next.lighting.preset, state.lighting.preset);
+      assert.notDeepEqual(next.post, state.post);
       assert.notEqual(next.materials['mat-7'].color, state.materials['mat-7'].color);
       assert.notEqual(next.materials['mat-7'].finish, state.materials['mat-7'].finish);
       state = next;
@@ -69,40 +71,33 @@ test('random clears stale focus and motion and cannot repeat a setup at RNG endp
   }
 });
 
-test('small deltas keep the same set and product while scaling the camera variation', () => {
-  const state = setup();
-  let previousDifference = 0;
-  for (const delta of [1, 10, 20, 35]) {
-    const next = randomizePresentation(state, metadata, { delta, random: () => .9 });
-    assert.equal(next.scene.preset, state.scene.preset);
-    assert.equal(next.scene.composition, state.scene.composition);
-    assert.equal(next.scene.seed, state.scene.seed);
-    assert.equal(next.scene.scale, state.scene.scale);
-    assert.equal(next.lighting.preset, state.lighting.preset);
-    assert.equal(next.lighting.tint, state.lighting.tint);
-    assert.equal(next.camera.preset, state.camera.preset);
-    assert.deepEqual(next.materials, state.materials);
-    const difference = Math.abs(next.camera.azimuth - state.camera.azimuth);
-    assert.ok(difference > previousDifference);
-    assert.ok(difference <= 40 * delta / 100 + .1);
-    previousDifference = difference;
+test('every positive delta changes environment, shot type, lights and mood while preserving authored surfaces below 70', () => {
+  const state=setup();
+  for(const delta of [1,10,35,55,69,70,100])for(const value of [0,.5,1-Number.EPSILON]) {
+    const next=randomizePresentation(state,metadata,{delta,random:()=>value});
+    assert.notEqual(next.scene.preset,state.scene.preset);
+    assert.notEqual(next.camera.preset,state.camera.preset);
+    assert.notEqual(next.lighting.preset,state.lighting.preset);
+    assert.notDeepEqual(next.post,state.post);
+    if(delta<70)assert.deepEqual(next.materials,state.materials);
+    assert.deepEqual(validateProject(makeProject(next,{type:'demo',name:'NSX'})).state,next);
   }
 });
 
-test('delta zero is unchanged, mid delta retains the environment, high delta changes it', () => {
-  const state = setup();
-  state.motion.playing = true; state.motion.preset = 'orbit';
-  state.camera.autoFocus = false; state.camera.focusPoint = [1, 2, 3];
-  assert.deepEqual(randomizePresentation(state, metadata, { delta: 0 }), state);
-  for (const delta of [40, 55, 69, 70, 85, 100]) {
-    const next = randomizePresentation(state, metadata, { delta, random: () => .5 });
-    if (delta < 70) assert.equal(next.scene.preset, state.scene.preset);
-    else assert.notEqual(next.scene.preset, state.scene.preset);
-    assert.notEqual(next.camera.azimuth, state.camera.azimuth);
-    assert.equal(next.motion.playing, false);
-    assert.equal(next.camera.autoFocus, true);
-    assert.equal(next.camera.focusPoint, null);
-    assert.deepEqual(validateProject(makeProject(next, { type: 'demo', name: 'NSX' })).state, next);
+test('delta changes variation amplitude, zero preserves all state, and sparkle returns to the presentation', () => {
+  const state=setup();state.motion.playing=true;state.motion.preset='orbit';
+  state.camera.autoFocus=false;state.camera.focusPoint=[1,2,3];
+  state.render.alpha=true;state.section.enabled=true;state.inspection.view='normals';
+  assert.deepEqual(randomizePresentation(state,metadata,{delta:0}),state);
+  const low=randomizePresentation(state,metadata,{delta:1,random:()=>.8});
+  const high=randomizePresentation(state,metadata,{delta:100,random:()=>.8});
+  assert.equal(low.camera.preset,high.camera.preset);
+  assert.ok(Math.abs(high.lighting.rotation)>Math.abs(low.lighting.rotation));
+  assert.ok(Math.abs(high.scene.scale-1)>Math.abs(low.scene.scale-1));
+  for(const next of [low,high]) {
+    assert.equal(next.motion.playing,true);assert.equal(next.camera.autoFocus,true);assert.equal(next.camera.focusPoint,null);
+    assert.equal(next.render.alpha,false);assert.equal(next.inspection.view,'pbr');assert.equal(next.section.enabled,false);
+    assert.equal(next.render.msaa,state.render.msaa);assert.equal(next.render.resolution,state.render.resolution);
   }
 });
 
@@ -115,7 +110,7 @@ test('delta stays effective at camera limits and is persisted with compatible de
   }
   const state = setup(); state.randomDelta = 12;
   const next = randomizePresentation(state, metadata, { random: () => .5 });
-  assert.equal(next.scene.preset, state.scene.preset);
+  assert.notEqual(next.scene.preset, state.scene.preset);
   const project = makeProject(next, { type: 'demo', name: 'NSX' });
   assert.equal(validateProject(project).state.randomDelta, 12);
   delete project.state.randomDelta;

@@ -46,6 +46,10 @@ Apri l’indirizzo HTTP indicato da Vite: il doppio clic su `index.html` non ese
 
 La build e i test automatici sono verificati. Il collaudo su GPU reale resta da eseguire: orbitare, cambiare preset, importare un GLB, esportare PNG e riaprire un `.pvis`, anche da telefono. Se WebGL 2 manca, l’app segnala esplicitamente la vista statica.
 
+Per il collaudo Lookdev: apri Ispeziona nella navbar e combina i tagli XYZ; Post per i look; Render per MSAA, FPS e Alpha. Verifica il rombo in hover e il click/tap che apre l’editor del materiale con UV attivo, esporta un PNG trasparente e riapri il progetto salvato. Il monitor misura frame consegnati, non tempi GPU. Prova drag/rotella/chevron della navbar a icone e sparkle con Δ 1, 35 e 100: ogni tap cambia scena, shot, luce, mood e movimento. Verifica il limite bloom 0.2 e il lucchetto per l’override fino a 1; controlla l’ombra sulle ruote e sotto il prodotto in Ring/Studio/Cubi, anche durante la rotazione.
+
+Nell’ingranaggio Progetto, importa un GLB e prova posizione, rotazione e scala. Verifica Centra/Appoggia/Inquadra/Reset, Annulla e riapertura del `.pvis`; sparkle deve conservare la trasformazione. Su mobile raggiungi tutte le nove tab con drag e chevron: l’icona attiva deve restare in vista.
+
 I crediti del modello demo sono nel README e in `licenses/MODEL.md`; la licenza del modello è CC BY-NC-SA 4.0.
 
 Documentazione: [Vercel Drop e metodi di deploy](https://vercel.com/docs/deployments), [Vite](https://vercel.com/docs/frameworks/frontend/vite), [configurazione](https://vercel.com/docs/project-configuration).

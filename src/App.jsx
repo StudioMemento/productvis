@@ -1,17 +1,28 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { IconCube, IconMountain, IconSun, IconCamera, IconRotate360, IconSettings, IconArrowBackUp, IconChevronDown, IconX, IconDice5, IconSparkles, IconFocus2, IconPlayerPlay, IconPlayerPause, IconRotateClockwise, IconRotate, IconInfinity, IconDeviceFloppy, IconFolderOpen, IconPhotoDown, IconMaximize, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconUpload, IconCheck, IconPalette, IconRefresh, IconInfoCircle, IconAlertCircle } from '@tabler/icons-react';
+import { IconCube, IconMountain, IconSun, IconCamera, IconRotate360, IconSettings, IconArrowBackUp, IconChevronDown, IconX, IconDice5, IconSparkles, IconFocus2, IconPlayerPlay, IconPlayerPause, IconRotateClockwise, IconRotate, IconInfinity, IconDeviceFloppy, IconFolderOpen, IconPhotoDown, IconMaximize, IconEye, IconEyeOff, IconAdjustmentsHorizontal, IconDeviceDesktop, IconScanCube, IconUpload, IconCheck, IconRefresh, IconInfoCircle, IconAlertCircle } from '@tabler/icons-react';
 import { CompositionSymbol } from './PresetSymbol.jsx';
 import { Tool, Knob, Toggle, Choices, Presets, Category } from './Controls.jsx';
 import { CategoryPager } from './CategoryPager.jsx';
 import { MaterialPicker } from './MaterialPicker.jsx';
 import { DeltaControl } from './DeltaControl.jsx';
+import { InspectorControls, PostControls, RenderControls } from './LookControls.jsx';
+import { MeshEditor } from './MeshEditor.jsx';
+import { ModelControls } from './ModelControls.jsx';
+import { DEFAULT_TRANSFORM } from './modelTransform.js';
+import { CategoryNavigation } from './CategoryNavigation.jsx';
+import { ProgressiveBlur } from './ProgressiveBlur.jsx';
+import { usesBottomDock } from './workspaceLayout.js';
 import { randomizePresentation } from './presentation.js';
-import { DEFAULT_STATE, TABS, SWATCHES, clone, applyPreset, validateProject, makeProject } from './state.js';
+import { DEFAULT_STATE, TABS, clone, applyPreset, validateProject, makeProject } from './state.js';
 const fixed = n => Number(n ?? 0).toFixed(2);
 const fileBase64 = blob => new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); });
 const download = (blob, name) => { const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000); };
 
 export function App() {
+  const [dockExpanded, setDockExpanded] = useState(false), [hoverTarget, setHoverTarget] = useState(null);
+  const [capabilities, setCapabilities] = useState({ samples: [] }), [stats, setStats] = useState(null);
+  const contextRef = useRef({});
+  const navigation = useRef(null), hoverMarker = useRef(null);
   const [engineReady, setEngineReady] = useState(false);
   const enginePromise = useRef(null);
   const [state, setState] = useState(() => clone(DEFAULT_STATE));
@@ -19,7 +30,7 @@ export function App() {
   const [status, setStatus] = useState('loading'), [progress, setProgress] = useState(0), [loadingModel, setLoadingModel] = useState(true);
   const [materials, setMaterials] = useState([]), [modelName, setModelName] = useState('Honda NSX · Demo');
   const [toast, setToast] = useState(null), [historyCount, setHistoryCount] = useState(0);
-  const [modelMenu, setModelMenu] = useState(false), [focusPick, setFocusPick] = useState(false), [error, setError] = useState('');
+  const [focusPick, setFocusPick] = useState(false), [error, setError] = useState('');
   const [showCredits, setShowCredits] = useState(false), [draggingFile, setDraggingFile] = useState(false);
   const [randomCount, setRandomCount] = useState(0);
   const canvas = useRef(null), engine = useRef(null), stateRef = useRef(state);
@@ -33,13 +44,19 @@ export function App() {
     groupRef.current = { key: group, time: Date.now() }; stateRef.current = next; setState(next);
   }, []);
   const field = (category, key, value) => change(s => ({ ...s, [category]: { ...s[category], [key]: value } }), `${category}.${key}`);
-  const materialField = (key, value) => change(s => ({ ...s, materials: { ...s.materials, [s.selectedMaterial]: { ...s.materials[s.selectedMaterial], [key]: value } } }), `material.${key}`);
+  const patchMaterial = (id, patch) => change(s => {
+    const current = s.materials[id] || {};
+    const alpha = patch.opacity < 1 && (current.alphaMode || 'opaque') === 'opaque' ? { alphaMode:'blend' } : {};
+    return { ...s, selectedMaterial:id, materials:{ ...s.materials, [id]:{ ...current, ...alpha, ...patch } } };
+  }, `material.${id}.${Object.keys(patch).join('.')}`);
+  const closeShader = useCallback(() => setHoverTarget(null), []);
   const undo = useCallback(() => { const prev = history.current.pop(); if (!prev) return; stateRef.current = prev; setState(prev); setHistoryCount(history.current.length); groupRef.current = null; notify('Ultima modifica annullata'); }, [notify]);
-  const selectCategory = useCallback(id => { if (TABS.includes(id)) { setActiveCategory(id); setModelMenu(false); setFocusPick(false); engine.current?.setFocusMode(false); } }, []);
+  const selectCategory = useCallback(id => { if (TABS.includes(id)) { setActiveCategory(id); setHoverTarget(null); setFocusPick(false); engine.current?.setFocusMode(false); } }, []);
   const acceptModel = useCallback((meta, descriptor, restoreState = null) => {
     if (!meta) return;
+    setHoverTarget(null);
     setMaterials(meta.materials); modelRef.current = descriptor; setModelName(descriptor.type === 'demo' ? 'Honda NSX · Demo' : descriptor.name);
-    const next = restoreState ? { ...restoreState, materials: { ...meta.initial, ...restoreState.materials }, selectedMaterial: meta.materials.some(m => m.id === restoreState.selectedMaterial) ? restoreState.selectedMaterial : meta.selected } : { ...stateRef.current, materials: meta.initial, selectedMaterial: meta.selected, camera: clone(DEFAULT_STATE.camera), motion: clone(DEFAULT_STATE.motion) };
+    const next = restoreState ? { ...restoreState, materials: { ...meta.initial, ...restoreState.materials }, selectedMaterial: meta.materials.some(m => m.id === restoreState.selectedMaterial) ? restoreState.selectedMaterial : meta.selected } : { ...stateRef.current, materials: meta.initial, selectedMaterial: meta.selected, camera: clone(DEFAULT_STATE.camera), motion: clone(DEFAULT_STATE.motion), transform: { ...DEFAULT_TRANSFORM } };
     history.current = []; setHistoryCount(0); groupRef.current = null; stateRef.current = next; setState(next); setLoadingModel(false); setError(''); engine.current?.setState(next, { immediate: true });
   }, []);
   useEffect(() => {
@@ -48,8 +65,16 @@ export function App() {
       if (cancelled) return null;
       instance = new StudioEngine(canvas.current, {
       onStatus: setStatus, onLoading: setProgress, onError: message => notify(message, true),
-      onSelect: id => { if (id) { change(s => ({ ...s, selectedMaterial: id }), null, false); selectCategory('product'); } },
-      onManualMove: () => { if (stateRef.current.motion.playing) change(s => ({ ...s, motion: { ...s.motion, playing: false } }), null, false); },
+      onCapabilities: setCapabilities, onStats: setStats, onHover: target => contextRef.current.hover?.(target),
+      onPointerPosition: (x,y) => { if (hoverMarker.current) hoverMarker.current.style.transform = `translate3d(${x}px,${y}px,0)`; },
+      onSelect: (id,target) => { if (id) {
+        change(s => { const material=s.materials[id]||{}, uvChannel=target.uvChannels.includes(material.uvChannel)?material.uvChannel:target.uvChannel;
+          return {...s,selectedMaterial:id,materials:{...s.materials,[id]:{...material,uvChannel}},inspection:{...s.inspection,view:'pbr'}};
+        }, null, false);
+        selectCategory('product'); setHoverTarget(null);
+        requestAnimationFrame(()=>workspace.current?.querySelector('#controls-product')?.scrollTo({top:0,behavior:'instant'}));
+      } },
+      onManualMove: () => { setHoverTarget(null); if (stateRef.current.motion.playing) change(s => ({ ...s, motion: { ...s.motion, playing: false } }), null, false); },
       onCameraChange: camera => change(s => ({ ...s, camera: { ...s.camera, ...camera } }), null, false),
       onMotionEnd: () => change(s => ({ ...s, motion: { ...s.motion, playing: false } }), null, false),
       onFocus: point => { change(s => ({ ...s, camera: { ...s.camera, autoFocus: true, focusPoint: point } })); setFocusPick(false); notify('Fuoco impostato'); },
@@ -66,32 +91,32 @@ export function App() {
     return () => { cancelled = true; clearTimeout(toastTimeout.current); instance?.dispose(); engine.current = null; };
   }, [acceptModel, change, notify, selectCategory]);
   useEffect(() => { engine.current?.setState(state); }, [state, engineReady]);
-  useEffect(() => { engine.current?.setTab('product'); }, [state.selectedMaterial, engineReady]);
+  useEffect(() => { engine.current?.setTab(activeCategory); }, [activeCategory, engineReady]);
   useEffect(() => {
     engine.current?.setPresentation(presentation);
     if (presentation) {
-      setFocusPick(false); engine.current?.setFocusMode(false); setModelMenu(false); setShowCredits(false); setToast(null);
+      closeShader(); setFocusPick(false); engine.current?.setFocusMode(false); setShowCredits(false); setToast(null);
       visibilityButton.current?.focus({ preventScroll: true });
     }
-  }, [presentation, engineReady]);
+  }, [presentation, engineReady, closeShader]);
   useEffect(() => {
     const keyDown = e => {
       if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable) return;
-      if (e.key === 'Escape') { setPresentation(false); setModelMenu(false); setShowCredits(false); setFocusPick(false); engine.current?.setFocusMode(false); }
+      if (e.key === 'Escape') { closeShader(); setPresentation(false); setShowCredits(false); setFocusPick(false); engine.current?.setFocusMode(false); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
-      if (/^[1-6]$/.test(e.key)) selectCategory(TABS[Number(e.key) - 1]);
+      if (/^[1-9]$/.test(e.key)) selectCategory(TABS[Number(e.key) - 1]);
       if (e.key.toLowerCase() === 'h') setPresentation(v => !v);
       if (e.key === ' ' && e.target.closest('button')) return;
       if (e.key === ' ' && stateRef.current.motion.preset !== 'still') { e.preventDefault(); change(s => ({ ...s, motion: { ...s.motion, playing: !s.motion.playing } }), null, false); }
     }; window.addEventListener('keydown', keyDown); return () => window.removeEventListener('keydown', keyDown);
-  }, [change, selectCategory, undo]);
+  }, [change, selectCategory, undo, closeShader]);
 
-  const loadDemo = async () => { setModelMenu(false); setLoadingModel(true); setProgress(0); setError(''); try { const instance = await enginePromise.current; if (!instance || instance.disposed) return; const meta = await instance.loadModel('/models/demo.glb', true); if (!meta) return; acceptModel(meta, { type: 'demo', name: 'Honda NSX' }); notify('Modello demo caricato'); } catch (e) { if (e.name !== 'AbortError') { setError(e.message); setLoadingModel(false); } } };
+  const loadDemo = async () => { setLoadingModel(true); setProgress(0); setError(''); try { const instance = await enginePromise.current; if (!instance || instance.disposed) return; const meta = await instance.loadModel('/models/demo.glb', true); if (!meta) return; acceptModel(meta, { type: 'demo', name: 'Honda NSX' }); notify('Modello demo caricato'); } catch (e) { if (e.name !== 'AbortError') { setError(e.message); setLoadingModel(false); } } };
   const importModel = async file => {
     if (!file) return; if (!/\.glb$/i.test(file.name)) { notify('Scegli un modello in formato GLB.', true); return; }
     if (file.size > 120 * 1024 * 1024) { notify('Per questa anteprima usa un GLB fino a 120 MB.', true); return; }
-    setLoadingModel(true); setProgress(0); setModelMenu(false); setError('');
-    try { const buffer = await file.arrayBuffer(); const instance = await enginePromise.current; if (!instance || instance.disposed) return; const meta = await instance.loadModel(buffer, false); if (!meta) return; acceptModel(meta, { type: 'embedded', name: file.name.replace(/\.glb$/i, ''), buffer }); notify('Il tuo prodotto è pronto'); selectCategory('product'); } catch (e) { if (e.name !== 'AbortError') { setError(e.message); setLoadingModel(false); } }
+    setLoadingModel(true); setProgress(0); setError('');
+    try { const buffer = await file.arrayBuffer(); const instance = await enginePromise.current; if (!instance || instance.disposed) return; const meta = await instance.loadModel(buffer, false); if (!meta) return; acceptModel(meta, { type: 'embedded', name: file.name.replace(/\.glb$/i, ''), buffer }); notify('Il tuo prodotto è pronto'); selectCategory('project'); } catch (e) { if (e.name !== 'AbortError') { setError(e.message); setLoadingModel(false); } }
     if (fileInput.current) fileInput.current.value = '';
   };
   const saveProject = async () => {
@@ -115,34 +140,60 @@ export function App() {
   const gpu = status === 'ready', canUse = materials.length > 0 && !loadingModel;
   const randomize = () => {
     if (!canUse || stateRef.current.randomDelta === 0) return;
-    change(s => randomizePresentation(s, materials));
-    setFocusPick(false); engine.current?.setFocusMode(false); setModelMenu(false);
-    setRandomCount(count => count + 1);
+    change(s => randomizePresentation(s, materials, { reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches }));
+    setFocusPick(false); engine.current?.setFocusMode(false);
+    closeShader(); setRandomCount(count => count + 1);
     if (!gpu) notify('Setup variato · anteprima statica');
   };
   const startGesture = () => { groupRef.current = null; };
   const knob = (category, key, label, props = {}) => <Knob label={label} value={state[category][key]} onChange={v => field(category, key, v)} disabled={!canUse} onStart={startGesture} {...props} />;
-  const materialKnob = (key, label, props = {}) => <Knob label={label} value={mat[key] ?? 0} onChange={v => materialField(key, v)} disabled={!canUse} onStart={startGesture} {...props} />;
+
   const presets = category => <Presets category={category} selected={category === 'product' ? mat.finish : state[category].preset} onChoose={id => choosePreset(category, id)} disabled={!canUse} />;
-  const setColor = color => change(s => ({ ...s, materials: { ...s.materials, [s.selectedMaterial]: { ...s.materials[s.selectedMaterial], color, overlay: Math.max(.65, mat.overlay) } } }), 'material.color');
+
   useEffect(() => {
     const panel = workspace.current;
-    const update = () => { const box = panel.getBoundingClientRect(); engine.current?.setWorkspace((window.innerWidth >= 900 || (window.innerWidth >= 600 && window.innerHeight <= 550)) ? { right: window.innerWidth - box.left + 24, bottom: 0 } : { right: 0, bottom: window.innerHeight - box.top + 16 }); };
-    const observer = new ResizeObserver(update); observer.observe(panel); window.addEventListener('resize', update); update();
+    const update = () => {
+      const box = panel.getBoundingClientRect(), width = window.innerWidth, height = window.innerHeight;
+      const dock = usesBottomDock(width,height);
+      const footer = navigation.current?.getBoundingClientRect();
+      const insets = dock ? {right:0,bottom:height-box.top+12} : {right:width-box.left+20,bottom:footer?height-footer.top+10:140};
+      engine.current?.setWorkspace(insets);
+    };
+    const observer = new ResizeObserver(update); observer.observe(panel); if (navigation.current) observer.observe(navigation.current); window.addEventListener('resize', update); update();
     return () => { observer.disconnect(); window.removeEventListener('resize', update); };
   }, [engineReady]);
 
-  return <main className={`studio ${presentation ? 'is-presenting' : ''} ${status === 'fallback' ? 'is-fallback' : ''}`}
+  contextRef.current.hover = target => {
+    if (presentation) return;
+    setHoverTarget(previous => !target ? null : previous?.id===target.id ? previous : target);
+  };
+  const contextMaterial = materials.find(m=>m.id===hoverTarget?.id);
+  const transformModel = (key, value) => change(s => ({ ...s, transform: { ...s.transform, [key]: value }, motion: { ...s.motion, playing: false } }), `transform.${key}`);
+  const modelAction = action => {
+    if (action === 'frame') {
+      if (engine.current) engine.current.cameraKey = null;
+      change(s => ({ ...applyPreset(s, 'camera', 'hero'), motion: { ...s.motion, playing: false } }));
+      return;
+    }
+    const transform = action === 'reset' ? { ...DEFAULT_TRANSFORM } : engine.current?.modelPlacementAction(action);
+    if (transform) change(s => ({ ...s, transform, motion: { ...s.motion, playing: false, ...(action === 'reset' ? { preset: 'still' } : {}) } }));
+  };
+
+  return <main className={`studio ${presentation ? 'is-presenting' : ''} ${status === 'fallback' ? 'is-fallback' : ''} ${state.render.alpha && gpu ? 'is-alpha' : ''} ${dockExpanded?'dock-expanded':''}`}
     onDragOver={e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDraggingFile(true); } }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDraggingFile(false); }} onDrop={e => { e.preventDefault(); setDraggingFile(false); const file = e.dataTransfer.files[0]; if (/\.(pvis|json)$/i.test(file?.name || '')) openProject(file); else importModel(file); }}>
-    <div className="viewport">{status === 'fallback' && <picture className="fallback-render"><source media="(max-width: 899px)" srcSet="/assets/studio-fallback-mobile.webp" /><img src="/assets/studio-fallback.webp" decoding="async" alt="Riferimento statico del prodotto; non rappresenta la scena 3D corrente" /></picture>}<canvas ref={canvas} aria-label="Prodotto 3D. Trascina per orbitare, pizzica per avvicinare, tocca una superficie per selezionarla." /></div><div className="ui-scrim" aria-hidden="true" />
+    <div className="viewport">{status === 'fallback' && <picture className="fallback-render"><source media="(max-width: 899px)" srcSet="/assets/studio-fallback-mobile.webp" /><img src="/assets/studio-fallback.webp" decoding="async" alt="Riferimento statico del prodotto; non rappresenta la scena 3D corrente" /></picture>}<canvas ref={canvas} aria-label="Prodotto 3D. Trascina per orbitare, pizzica per avvicinare, tocca una superficie per selezionarla." /></div><ProgressiveBlur className="ui-scrim"/>
     <header className="topbar">
-      <span className="wordmark" aria-hidden={presentation}>Product<span>vis</span><i /></span>
-      <div className="random-tools" id="productvis-random" inert={presentation ? true : undefined} aria-hidden={presentation}>
-        <Tool label="Annulla" className="undo-control" onClick={undo} disabled={!historyCount}><IconArrowBackUp size={18} /></Tool>
-        <Tool label="Random · nuova variante" title={state.randomDelta === 0 ? 'Aumenta il delta per creare una variante' : `Nuova variante · Δ ${state.randomDelta}%`} className="random-control" onClick={randomize} disabled={!canUse || state.randomDelta === 0}><IconSparkles key={randomCount} size={23} className={randomCount ? 'sparkle-burst' : undefined} /></Tool>
-        <DeltaControl value={state.randomDelta} onChange={value => change(s => ({ ...s, randomDelta: value }), null, false)} disabled={!canUse} />
+      <img className="memento-logo" src="/assets/memento.svg" alt="Memento" width="1418" height="57" aria-hidden={presentation}/>
+      <div className="global-toolbar" role="group" aria-label="Comandi presentazione">
+        <ProgressiveBlur className="toolbar-blur"/>
+        <div className="toolbar-leading">
+          <Tool ref={visibilityButton} label={presentation ? 'Mostra UI' : 'Nascondi UI'} title={presentation ? 'Mostra UI · H' : 'Nascondi UI · H'} className="visibility-toggle" aria-controls="productvis-controls productvis-navigation productvis-random" aria-expanded={!presentation} onClick={() => setPresentation(v => !v)}>{presentation ? <IconEye size={20}/> : <IconEyeOff size={20}/>}</Tool>
+        </div>
+        <div className="toolbar-random" id="productvis-random" inert={presentation?true:undefined} aria-hidden={presentation}>
+          <Tool label="Random · nuova variante" title={state.randomDelta===0?'Aumenta il delta per creare una variante':`Scena, shot, luci, mood e movimento · Δ ${state.randomDelta}`} className="random-control" onClick={randomize} disabled={!canUse||state.randomDelta===0}><IconSparkles key={randomCount} size={23} className={randomCount?'sparkle-burst':undefined}/></Tool>
+        </div>
+        <div className="toolbar-delta" inert={presentation?true:undefined} aria-hidden={presentation}><DeltaControl value={state.randomDelta} onChange={value=>change(s=>({...s,randomDelta:value}),null,false)} disabled={!canUse}/></div>
       </div>
-      <Tool ref={visibilityButton} label={presentation ? 'Mostra UI' : 'Nascondi UI'} title={presentation ? 'Mostra UI · H' : 'Nascondi UI · H'} className={`visibility-toggle ${presentation ? 'ui-hidden' : ''}`} aria-controls="productvis-controls productvis-random" aria-expanded={!presentation} onClick={() => setPresentation(v => !v)}>{presentation ? <IconLayoutSidebarRightExpand size={21} /> : <IconLayoutSidebarRightCollapse size={21} />}<span>UI</span></Tool>
     </header>
     {status === 'fallback' && <div className="gpu-note" role="status"><IconInfoCircle size={15} /><span>Riferimento statico · WebGL non disponibile</span><Tool label="Riprova il 3D" onClick={() => window.location.reload()}><IconRefresh size={15} /></Tool></div>}
     {focusPick && <div className="focus-hint"><IconFocus2 size={17} />Tocca il punto di fuoco<Tool label="Annulla fuoco" onClick={() => { setFocusPick(false); engine.current?.setFocusMode(false); }}><IconX size={17} /></Tool></div>}
@@ -150,14 +201,11 @@ export function App() {
     {error && <div className="error-state" role="alert"><IconAlertCircle size={24} /><p>{error}</p><button onClick={loadDemo}>Ricarica demo</button><button onClick={() => setError('')}>Chiudi</button></div>}
 
     <aside className="control-column" id="productvis-controls" ref={workspace} aria-label="Controlli ProductVis" aria-hidden={presentation} inert={presentation ? true : undefined}>
+      <button type="button" className="dock-handle" aria-label={dockExpanded?'Riduci controlli':'Espandi controlli'} aria-expanded={dockExpanded} onClick={()=>setDockExpanded(v=>!v)}><IconChevronDown size={16} style={{transform:dockExpanded?'none':'rotate(180deg)'}}/><i/></button>
       <CategoryPager active={activeCategory} onChange={selectCategory}>
-      <Category id="product" title="Prodotto" icon={IconCube} action={<Tool label="Cambia modello" onClick={() => setModelMenu(v => !v)} aria-expanded={modelMenu}><IconUpload size={18} /></Tool>}>
-        {modelMenu && <div className="inline-actions"><button onClick={() => fileInput.current.click()}><IconUpload size={17} />Importa GLB</button><button onClick={loadDemo}><IconCube size={17} />Demo NSX</button></div>}
-        <MaterialPicker materials={materials} selectedId={state.selectedMaterial} disabled={!canUse} onSelect={id => change(s => ({ ...s, selectedMaterial: id }), null, false)} />
-        {presets('product')}
-        <div className="color-swatches" role="group" aria-label="Colore superficie">{SWATCHES.map(s => <button key={s.color} className={`swatch ${mat.color === s.color ? 'selected' : ''}`} style={{ '--swatch': s.color }} aria-label={s.name} aria-pressed={mat.color === s.color} disabled={!canUse} onClick={() => setColor(s.color)} />)}<label className="color-picker" title="Colore personalizzato"><IconPalette size={20} /><input type="color" aria-label="Colore personalizzato" value={mat.color} disabled={!canUse} onChange={e => setColor(e.target.value)} /></label></div>
-        <div className="knob-grid">{materialKnob('overlay', 'Colore')}{materialKnob('roughness', 'Rugosità')}{materialKnob('metalness', 'Metallo')}{materialKnob('clearcoat', 'Vernice')}{materialKnob('opacity', 'Opacità')}{materialKnob('normalScale', 'Rilievo', { max: 2, disabled: !canUse || !selectedMaterial?.hasNormalMap, format: v => `${v.toFixed(1)}×` })}</div>
-        <label className="select-row"><span>Mappatura</span><select aria-label="Mappatura texture" value={mat.uvChannel ?? 0} disabled={!selectedMaterial?.hasTexture || !canUse} onChange={e => materialField('uvChannel', Number(e.target.value))}>{(selectedMaterial?.uvChannels?.length ? selectedMaterial.uvChannels : [0]).map(n => <option key={n} value={n}>UV {n + 1}</option>)}</select></label>
+      <Category id="product" title="Prodotto" icon={IconCube}>
+        <MaterialPicker materials={materials} selectedId={state.selectedMaterial} disabled={!canUse} compact onSelect={id => change(s => ({ ...s, selectedMaterial: id }), null, false)} />
+        <MeshEditor material={mat} metadata={selectedMaterial} onChange={patch=>patchMaterial(state.selectedMaterial,patch)} onPreset={id=>choosePreset('product',id)} onStart={startGesture} disabled={!canUse}/>
       </Category>
 
       <Category id="scene" title="Scena" icon={IconMountain} action={state.scene.preset === 'cubes' && <Tool label="Varia composizione" disabled={!canUse} onClick={() => field('scene', 'seed', Math.floor(Math.random() * 9999))}><IconDice5 size={19} /></Tool>}>
@@ -180,25 +228,46 @@ export function App() {
       <Category id="camera" title="Camera" icon={IconCamera} action={<Tool label="Tocca il punto di fuoco" disabled={!gpu} aria-pressed={focusPick} className={focusPick ? 'selected' : ''} onClick={() => { const next = !focusPick; setFocusPick(next); engine.current?.setFocusMode(next); }}><IconFocus2 size={19} /></Tool>}>
         {presets('camera')}
         <Choices label="Lente" value={state.camera.focal} options={[24,35,50,85,120].map(value=>({value,label:`${value}`,ariaLabel:`Focale ${value} millimetri`}))} onChange={v=>field('camera','focal',v)} />
-        <div className="knob-grid">{knob('camera','focal','Focale',{min:18,max:150,step:1,format:v=>`${Math.round(v)}mm`})}{knob('camera','aperture','Apertura',{min:1.4,max:16,step:.2,format:v=>`ƒ/${v.toFixed(1)}`})}{knob('camera','exposure','Esposizione',{min:-2,max:2,step:.1,format:v=>`${v>0?'+':''}${v.toFixed(1)}`})}{knob('camera','azimuth','Angolo',{min:-180,max:180,step:1,format:v=>`${Math.round(v)}°`})}{knob('camera','elevation','Altezza',{min:1,max:85,step:1,format:v=>`${Math.round(v)}°`})}{knob('camera','distance','Distanza',{min:.25,max:2.5,step:.01,format:v=>`${v.toFixed(2)}×`})}{knob('camera','focus','Fuoco',{min:.2,max:30,step:.1,format:fixed,disabled:!canUse || state.camera.autoFocus})}</div>
+        <span className="control-group-title">Ottica</span><div className="knob-grid">{knob('camera','focal','Focale',{min:18,max:150,step:1,format:v=>`${Math.round(v)}mm`})}{knob('camera','aperture','Apertura',{min:1.4,max:16,step:.2,format:v=>`ƒ/${v.toFixed(1)}`})}{knob('camera','exposure','Esposizione',{min:-2,max:2,step:.1,format:v=>`${v>0?'+':''}${v.toFixed(1)}`})}</div><span className="control-group-title">Inquadratura</span><div className="knob-grid">{knob('camera','azimuth','Angolo',{min:-180,max:180,step:1,format:v=>`${Math.round(v)}°`})}{knob('camera','elevation','Altezza',{min:1,max:85,step:1,format:v=>`${Math.round(v)}°`})}{knob('camera','distance','Distanza',{min:.25,max:2.5,step:.01,format:v=>`${v.toFixed(2)}×`})}</div>
         <Toggle label="Fuoco auto" checked={state.camera.autoFocus} icon={IconFocus2} disabled={!canUse} onChange={v=>field('camera','autoFocus',v)} />
+        {!state.camera.autoFocus&&<div className="knob-grid">{knob('camera','focus','Fuoco',{min:.2,max:30,step:.1,format:fixed})}</div>}
       </Category>
 
       <Category id="motion" title="Movimento" icon={IconRotate360}>
         {presets('motion')}
         <div className="motion-actions"><Tool label={state.motion.playing ? 'Pausa' : 'Riproduci'} className="play-control" disabled={!canUse || state.motion.preset==='still'} onClick={()=>field('motion','playing',!state.motion.playing)}>{state.motion.playing ? <IconPlayerPause size={20} /> : <IconPlayerPlay size={20} />}</Tool><Choices label="Verso" value={state.motion.direction} options={[{value:1,label:state.motion.preset==='dolly'?<IconChevronDown size={20} style={{transform:'rotate(180deg)'}}/>:<IconRotateClockwise size={20}/>,ariaLabel:state.motion.preset==='dolly'?'Avvicina':'Orario'},{value:-1,label:state.motion.preset==='dolly'?<IconChevronDown size={20}/>:<IconRotate size={20}/>,ariaLabel:state.motion.preset==='dolly'?'Allontana':'Antiorario'}]} onChange={v=>field('motion','direction',v)}/><Toggle label="Loop" checked={state.motion.loop} icon={IconInfinity} onChange={v=>field('motion','loop',v)} disabled={state.motion.preset==='still'}/></div>
-        <div className="knob-grid">{knob('motion','speed','Velocità',{min:.25,max:3,step:.05,format:v=>`${v.toFixed(2)}×`,disabled:!canUse || state.motion.preset==='still'})}{state.motion.preset==='dolly' ? knob('motion','travel','Corsa',{min:.05,max:.6,step:.05}) : knob('motion','amplitude','Ampiezza',{min:15,max:360,step:5,format:v=>`${Math.round(v)}°`,disabled:!canUse || state.motion.preset==='still'})}</div>
+        <div className="knob-grid">{knob('motion','speed','Velocità',{min:.25,max:3,step:.05,format:v=>`${v.toFixed(2)}×`,disabled:!canUse || state.motion.preset==='still'})}{state.motion.preset==='dolly' ? knob('motion','travel','Corsa',{min:.05,max:.6,step:.05}) : knob('motion','amplitude','Ampiezza',{min:state.motion.preset==='idle'?1:15,max:state.motion.preset==='idle'?15:360,step:state.motion.preset==='idle'?1:5,format:v=>`${Math.round(v)}°`,disabled:!canUse || state.motion.preset==='still'})}</div>
         {state.motion.preset==='turntable' && <Choices label="Asse" value={state.motion.axis} options={['x','y','z'].map(value=>({value,label:value.toUpperCase()}))} onChange={v=>field('motion','axis',v)}/>}
       </Category>
 
+      <Category id="post" title="Post process" icon={IconAdjustmentsHorizontal}>
+        <PostControls state={state} change={change} disabled={!canUse} onStart={startGesture}/>
+      </Category>
+
+      <Category id="inspect" title="Ispeziona" icon={IconScanCube}>
+        <InspectorControls state={state} change={change} disabled={!canUse} onStart={startGesture}/>
+      </Category>
+
+      <Category id="render" title="Render" icon={IconDeviceDesktop}>
+        <RenderControls state={state} change={change} capabilities={capabilities} stats={stats} onStart={startGesture}/>
+        <div className="project-actions render-actions"><button onClick={exportImage} disabled={!gpu || !canUse} title={!gpu?'Richiede WebGL':undefined}><IconPhotoDown size={19}/>PNG</button><button onClick={()=>setPresentation(true)}><IconMaximize size={19}/>Presenta</button></div>
+      </Category>
+
       <Category id="project" title="Progetto" icon={IconSettings}>
-        <input className="project-name" aria-label="Nome progetto" value={state.name} maxLength={80} onChange={e=>change(s=>({...s,name:e.target.value}),'name')}/>
-        <div className="project-actions"><button onClick={saveProject} disabled={!canUse}><IconDeviceFloppy size={19}/>Salva</button><button onClick={()=>projectInput.current.click()}><IconFolderOpen size={19}/>Apri</button><button onClick={exportImage} disabled={!gpu || !canUse} title={!gpu?'Richiede WebGL':undefined}><IconPhotoDown size={19}/>PNG</button><button onClick={()=>setPresentation(true)}><IconMaximize size={19}/>Presenta</button></div>
-        <Choices label="Qualità" value={state.quality} options={[{value:'auto',label:'Auto'},{value:'fluid',label:'Fluida'},{value:'high',label:'Alta'}]} onChange={v=>change(s=>({...s,quality:v}))}/>
-        <button className="credits-link" onClick={()=>setShowCredits(true)}><IconInfoCircle size={14}/>Crediti demo</button>
+        <ModelControls name={modelName} transform={state.transform} disabled={!canUse} loading={loadingModel} onImport={()=>fileInput.current.click()} onDemo={loadDemo} onChange={transformModel} onAction={modelAction} onStart={startGesture}/>
+        <div className="project-files">
+          <span className="control-group-title">File</span>
+          <input className="project-name" aria-label="Nome progetto" value={state.name} maxLength={80} onChange={e=>change(s=>({...s,name:e.target.value}),'name')}/>
+          <div className="project-actions"><button onClick={saveProject} disabled={!canUse}><IconDeviceFloppy size={19}/>Salva</button><button onClick={()=>projectInput.current.click()}><IconFolderOpen size={19}/>Apri</button></div>
+          <button className="undo-project" onClick={undo} disabled={!historyCount}><IconArrowBackUp size={15}/>Annulla</button>
+          <button className="credits-link" onClick={()=>setShowCredits(true)}><IconInfoCircle size={14}/>Crediti demo</button>
+        </div>
       </Category>
       </CategoryPager>
     </aside>
+    <CategoryNavigation active={activeCategory} onChange={selectCategory} hidden={presentation} dockRef={navigation}/>
+    {!presentation && gpu && hoverTarget && contextMaterial && <div className="mesh-hover" ref={hoverMarker} style={{transform:`translate3d(${hoverTarget.x}px,${hoverTarget.y}px,0)`}} aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 21 12 12 21 3 12Z"/><path d="M12 0v6m12 6h-6M12 24v-6M0 12h6"/></svg><span>{contextMaterial.label}<small>UV {(state.materials[hoverTarget.id]?.uvChannel??hoverTarget.uvChannel)+1}</small></span></div>}
+    {state.render.stats && !presentation && gpu && <output className="performance-hud" aria-label="Monitor rendering"><b>{stats?.idle?'Idle':stats?.fps?`${stats.fps} fps`:'— fps'}</b><span>{stats?.frameMs?`${stats.frameMs.toFixed(1)} ms · `:''}{stats?.width} × {stats?.height}</span><span>MSAA {stats?.samples?`${stats.samples}×`:'Off'} · {stats?.triangles?`${Math.round(stats.triangles/1000)}k tris`:''}</span></output>}
     {toast && <div className={`toast ${toast.bad ? 'bad' : ''}`} role="status">{toast.bad ? <IconAlertCircle size={18}/> : <IconCheck size={18}/>}<span>{toast.message}</span></div>}
     {draggingFile && <div className="file-drop"><IconUpload size={36}/><span>Rilascia GLB o progetto</span></div>}
     {showCredits && <div className="credits-backdrop" onClick={()=>setShowCredits(false)}><section className="credits" role="dialog" aria-modal="true" aria-label="Crediti modello" onClick={e=>e.stopPropagation()}><Tool label="Chiudi crediti" onClick={()=>setShowCredits(false)}><IconX size={20}/></Tool><h2>Honda NSX · Demo</h2><p>2015 Rocket Bunny Racing Honda NSX</p><a href="https://sketchfab.com/ddiaz-design" target="_blank" rel="noreferrer">Ddiaz Design</a><a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer">CC BY-NC-SA 4.0</a><small>{modelName} · {materials.length} superfici</small></section></div>}

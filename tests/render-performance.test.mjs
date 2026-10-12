@@ -4,6 +4,7 @@ import { createRenderLoop } from '../src/renderLoop.js';
 import { renderPixelRatio } from '../src/renderBudget.js';
 import { StudioEngine } from '../src/engine.js';
 import { DEFAULT_STATE, clone } from '../src/state.js';
+import { PerformanceMonitor } from '../src/performanceMonitor.js';
 
 function clock(render) {
   const queue = new Map(); let id = 0;
@@ -70,7 +71,8 @@ test('engine sleeps with invisible particles, but keeps visible particle motion 
     const engine = Object.create(StudioEngine.prototype);
     let renders = 0;
     Object.assign(engine, {
-      config: clone(DEFAULT_STATE), ready: true, renderer: {}, transition: false, lastFrame: 0,
+      config: clone(DEFAULT_STATE), ready: true, renderer: { info: { reset() {} } }, transition: false, lastFrame: 0,
+      stage: { visible: true }, worldPlanes: [], monitor: new PerformanceMonitor(), reportStats() {},
       controls: { update: () => false }, composer: { render: () => renders++ },
       particles: { visible: true, material: { opacity: 0 }, rotation: { y: 0 } },
     });
@@ -79,8 +81,9 @@ test('engine sleeps with invisible particles, but keeps visible particle motion 
     engine.particles.material.opacity = .2;
     assert.equal(engine.tick(32), true); assert.ok(engine.particles.rotation.y > 0);
     engine.particles.visible = false; assert.equal(engine.tick(48), false);
-    engine.controls.update = () => true; assert.equal(engine.tick(64), true);
+    engine.particles.visible = true; engine.stage.visible = false; assert.equal(engine.tick(64), false);
+    engine.controls.update = () => true; assert.equal(engine.tick(80), true);
     globalThis.document.hidden = true; const before = renders;
-    assert.equal(engine.tick(80), false); assert.equal(renders, before);
+    assert.equal(engine.tick(96), false); assert.equal(renders, before);
   } finally { if (previousDocument === undefined) delete globalThis.document; else globalThis.document = previousDocument; }
 });

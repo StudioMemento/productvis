@@ -1,6 +1,6 @@
 # ProductVis · Preset Studio
 
-Prototipo interattivo React + Three.js della direzione approvata: prodotto a tutto viewport, UI flottante, preset a rombo e controlli essenziali su un gradiente sfumato senza bordi.
+Prototipo interattivo React + Three.js della direzione approvata: prodotto a tutto viewport, UI flottante, preset a rombo e controlli essenziali su blur progressivo del fondale senza bordi.
 
 **Stato:** build e logica verificate con test automatici. Collaudo visivo, touch, prestazioni GPU ed esportazione PNG su dispositivi reali ancora da completare: la sessione di sviluppo non dispone di un browser WebGL utilizzabile. Il pacchetto include la configurazione Vercel e le istruzioni in `DEPLOY_VERCEL.md`.
 
@@ -31,24 +31,56 @@ Le immagini di riserva WebP si caricano solo quando WebGL non è disponibile. Le
 
 ## Categorie e controlli tattili
 
-Le funzioni sono raccolte in sei tab con icone ancorate al fondo della colonna, sotto ai controlli e ai chevron. Su desktop la UI rimane a destra; su mobile nella parte inferiore. Swipe/scroll orizzontale cambiano categoria, lo scroll verticale percorre i controlli della pagina. Chevron, rotella sulla navigazione e tastiera sono alternative equivalenti. Ambra, sottolineatura e posizione 01/06 mantengono visibile la categoria attiva. La camera tiene conto dello spazio occupato dalla UI.
+Le funzioni sono raccolte in nove categorie. La navbar globale è in basso al centro: nove sole icone in un selettore prospettico, con l'attiva più grande e luminosa. Il titolo della pagina e i tooltip indicano la categoria; i nomi rimangono disponibili alle tecnologie assistive. Drag, rotella, chevron, tap e frecce da tastiera cambiano categoria. Su mobile la rail scorre mantenendo visibile l’icona attiva e conservando la dimensione dei bersagli touch. Le pagine mantengono lo swipe orizzontale e lo scroll verticale locale.
 
-Lo **sparkle** è centrato nel viewport con **Δ %** accanto: trascina il numero, toccalo per inserirlo o usa le frecce da tastiera. Il delta controlla la distanza dallo shot corrente: 1–39% mantiene set, rig e materiali con variazioni vicine; 40–69% esplora nuove luci, camera e finitura nello stesso ambiente; 70–100% cambia anche ambiente. A 0% lo shot resta invariato. Il valore iniziale è 35% e viene salvato nel progetto; i file precedenti rimangono compatibili.
+Il logo **Memento** fornito dall’utente è isolato in alto a sinistra. In alto al centro: nascondi UI, **sparkle**, knob delta e valore intero affiancato, senza etichetta aggiuntiva. Lo sparkle resta sull’asse centrale; sui telefoni i comandi scendono sotto il logo per evitare sovrapposizioni. Ogni tap con delta maggiore di zero cambia ambiente, tipo di shot, rig di luci e mood del postprocessing. Il delta dosa l'intensità delle variazioni numeriche. A 0 resta tutto invariato; sotto 70 i materiali sono conservati, da 70 può cambiare anche la finitura della superficie opaca selezionata. Vetri, luci, trasparenze, UV e altri materiali restano protetti.
 
-Un solo Annulla recupera l'intero setup precedente. Il random mantiene modello, qualità, nome, UV, rilievo, trasparenze e tutti gli altri materiali; vetri e luci non vengono ricolorati. Il movimento si ferma e il fuoco torna automatico. Nessuna anteprima aggiuntiva viene generata. Il tasto **UI**, in alto a destra, nasconde tutti i controlli e lascia solo il comando per riaprirli.
+Un solo Annulla recupera l’intero setup precedente. Il random include rotazione del prodotto, orbita/dolly camera e Idle, una lenta oscillazione con respiro della distanza. Il delta dosa anche velocità, ampiezza e corsa; gli shot Macro usano soltanto movimenti contenuti. La nuova inquadratura si completa prima di avviare l’animazione. Con riduzione del movimento attiva nel sistema, il preset viene scelto ma resta in pausa. Ripristina fuoco automatico e PBR, disattiva sezioni e sfondo alpha; qualità e MSAA restano invariati. **Nascondi UI** lascia soltanto il comando di riapertura, centrato. Annulla è in Progetto → File e resta disponibile con Ctrl/Cmd Z.
 
-- **Prodotto:** modello demo o GLB, selezione tramite tap sul modello o slider tattile a scatti, finiture a rombo, colore e proprietà PBR, mappatura UV.
+- **Prodotto:** selezione tramite tap o slider tattile, finiture, colori, PBR e UV. Gruppi e valori allineati su una griglia comune.
 - **Scena:** Ring, Void, Studio, Cinema, Cubi e Particelle. Cubi usa un basamento cubico reale, volumi laterali separati e quote sfalsate. Composizioni A/B/C, variazione, scala, atmosfera, riflesso e superficie.
 - **Luci:** preset e regolazioni di intensità, direzione, temperatura, morbidezza e key/fill/rim.
-- **Camera:** angolazioni, focale, apertura, esposizione, posizione e fuoco automatico/manuale.
-- **Movimento:** fermo, rotazione prodotto, orbita camera e dolly; play/pausa, verso, loop, velocità, ampiezza o corsa, asse dove pertinente.
-- **Progetto:** salva/apri `.pvis`, PNG, presentazione, qualità e crediti.
+- **Camera:** angolazioni, Ottica (focale, apertura, esposizione), Inquadratura (angolo, altezza, distanza) e fuoco. La distanza di fuoco manuale compare quando Auto è spento.
+- **Movimento:** fermo, Idle, rotazione prodotto, orbita camera e dolly; play/pausa, verso, loop, velocità, ampiezza o corsa, asse dove pertinente.
+- **Post:** look, bloom, DOF e color grading.
+- **Ispeziona:** wireframe, normali e tagli XYZ.
+- **Render:** qualità, MSAA, FPS, risoluzione, monitor e sfondo alpha; export PNG e Presenta.
+- **Progetto:** upload GLB/demo, posizione XYZ, rotazione XYZ e scala uniforme; Centra, Appoggia, Inquadra e Reset. File raccoglie nome, salva/apri `.pvis`, annulla e crediti.
 
 I parametri mantengono i knob compatti, con nome immediatamente sopra a valore o percentuale e senza pulsanti +/−. Trascinamento verticale, frecce da tastiera o tap sul valore per inserirlo direttamente. Shift durante il drag consente una regolazione fine; Home/End selezionano gli estremi. I preset usano SVG/CSS statici senza miniature GPU.
 
 Le 32 superfici della NSX sono raccolte in sei famiglie senza perdere materiali: Carrozzeria, Ruote, Vetri, Luci, Interni e Dettagli. Il selettore scorre tra famiglie e le piccole frecce raggiungono i singoli materiali. Il nome sotto al selettore indica sempre il bersaglio effettivo; cambiare famiglia non modifica automaticamente tutte le superfici.
 
-Ogni categoria conserva le altre regolazioni. Annulla conserva fino a 40 modifiche; la navigazione manuale sospende il movimento. Il modello importato viene incorporato nel progetto. Scorciatoie: `1–6` selezionano le categorie, `H` mostra/nasconde UI, `Spazio` play/pausa fuori dai controlli interattivi, `Esc` chiude gli overlay, `Ctrl/Cmd Z` annulla.
+Ogni categoria conserva le altre regolazioni. Annulla conserva fino a 40 modifiche; la navigazione manuale sospende il movimento. Il modello importato viene incorporato nel progetto. Scorciatoie: `1–9` selezionano le categorie, `H` mostra/nasconde UI, `Spazio` play/pausa fuori dai controlli interattivi, `Esc` chiude gli overlay, `Ctrl/Cmd Z` annulla.
+
+## Modello nello spazio
+
+Nell’ingranaggio **Progetto**, Importa GLB sostituisce il modello attivo; Demo ripristina la NSX. L’importazione conserva i materiali originali e normalizza la dimensione massima a 4.7 unità di scena: i valori di posizione sono unità normalizzate, non metri. Le tre modalità Posizione / Rotazione / Scala espongono knob tattili e valori modificabili. Posizione ±10, rotazione ±180°, scala 0.1–3×. La scala è uniforme per conservare le proporzioni.
+
+Centra allinea l’ingombro reale agli assi X/Z; Appoggia porta la parte inferiore sul piano della scena, dopo eventuali rotazioni. Inquadra ritrova l’intero modello nella vista Hero, anche dopo spostamento o ridimensionamento. Reset ripristina la posa e ferma l’animazione. Le trasformazioni mettono in pausa il movimento, sono annullabili e si salvano nel `.pvis`; sparkle le conserva. Sostituire il modello le azzera, mentre aprire un progetto le ripristina. I vecchi file restano compatibili.
+
+## Lookdev
+
+L'hover sul modello mostra un piccolo rombo/crosshair e il nome del bersaglio. Il click (tap su touch) seleziona la superficie e apre l'editor unico nella categoria Prodotto. Materiale e canale UV della texture colore sono subito visibili; i canali realmente disponibili si selezionano nello stesso gruppo. Se un materiale è condiviso, le modifiche valgono per tutte le mesh che lo usano. Non è un editor di unwrap o di singole isole UV.
+
+Finiture e colori usano rombi statici interamente riempiti, senza campioni quadrati interni. Rugosità, metallo, vernice, alpha e rilievo sono raccolti in una griglia; facce Esterno / Due lati / Interno e modalità alpha Solido / Taglio / Blend seguono nello stesso editor. Ottica ed emissione espandono trasmissione, IOR, spessore ed emissione. Le proprietà non supportate sono disabilitate. Lo sfondo della UI usa blur reale del fondale con maschere sfumate, senza pannello a gradiente colorato.
+
+Nel modello NSX tutti i materiali risultano già double-sided. Le texture ritagliate di interni, cerchi e decal erano marcate Blend: vengono trattate come ritagli alpha con scrittura della profondità, evitando la sovrapposizione da ordinamento trasparente. I tre materiali di vetro mantengono il blending; i modelli GLB importati conservano la propria configurazione. La selezione attraversa i pixel trasparenti dei ritagli usando il canale UV corrente. Le texture sorgenti vengono lette una volta e memorizzate; il viewport non viene letto. Il confronto visivo finale resta da eseguire con WebGL attivo.
+
+
+**Ispeziona**, direttamente nella navbar, mostra PBR, wireframe triangolato, overlay o normali. Abilita gli assi X/Y/Z e sposta ogni taglio; Piano elimina un lato invertibile, Fascia mantiene un intervallo e permette tre fasce simultanee. Le guide sono facoltative. Sono sezioni aperte, senza superfici di chiusura o modifica della geometria.
+
+**Post** limita il Bloom a 0.2; il lucchetto «Max 0.2» abilita l’override manuale fino a 1, anche tramite valore numerico. Ripristinare il limite riduce subito un valore superiore. Preset e random disattivano l’override e rispettano 0.2. Lo sblocco è salvato nel progetto; i vecchi progetti senza override sono limitati a 0.2.
+
+L’**ombra di contatto** viene proiettata dalla parte inferiore del modello sul piano o sul basamento. Tiene conto dei ritagli alpha e si attenua se il prodotto è sollevato. Sul cubo è ritagliata ai bordi del basamento e scompare quando il modello è fuori dalla sua superficie. È nascosta in Void, Alpha, viste diagnostiche e durante le sezioni. La proiezione è in cache: camera e luci non la ricalcolano, la rotazione del prodotto sì. Non è una simulazione completa di occlusione ambientale.
+
+**Sfondo alpha** nasconde ambiente, basamento e pavimento nel render e nel PNG; il motivo a scacchi appartiene soltanto alla UI. Bloom e DOF vengono sospesi per conservare il canale alpha, e riprendono dalle regolazioni precedenti disattivando Alpha. DOF è sospeso anche durante il taglio; le guide non vengono esportate. Non è un export vettoriale o della mesh.
+
+**MSAA** regola entrambi i render target HDR: Auto, Off, 2×, 4×, 8×. Sono selezionabili soltanto i campioni dichiarati dalla GPU; il valore effettivo è visibile. Auto preferisce 4× desktop, 2× touch, Off in qualità Fluida, scegliendo un valore supportato non superiore alla richiesta.
+
+**FPS** limita l'animazione a 30/60 (Auto: 30 con puntatore touch, 60 con mouse). Le modifiche dirette rimangono immediate. Risoluzione 50–100% moltiplica il budget della qualità scelta; Adattiva può ridurla ulteriormente fino al 60% di quel valore e recupera gradualmente. Non cambia l'inquadratura. Il monitor misura FPS consegnati e intervallo p95 tra i frame, non durata GPU; Idle indica che il renderer dorme. È un obiettivo di fluidità, non una garanzia di FPS.
+
+Telefoni e tablet verticali usano il dock inferiore espandibile; desktop e telefoni orizzontali mantengono la colonna. Le hit area touch sono aumentate. Tutte le nuove regolazioni sono salvate nel progetto e annullabili; i vecchi `.pvis` ricevono valori compatibili.
 
 ## Limiti dichiarati
 
@@ -66,6 +98,12 @@ Ogni categoria conserva le altre regolazioni. Annulla conserva fino a 40 modific
 - `src/state.js`: preset, formato progetto e validazione.
 - `src/presentation.js`, `src/DeltaControl.jsx`: combinazioni random, somiglianza regolabile e protezione delle superfici.
 - `src/engine.js`: renderer, modello, materiali, scene, luci e camera.
+- `src/ModelControls.jsx`, `src/modelTransform.js`, `src/modelPlacement.js`: gestione, validazione e trasformazioni del modello.
+- `src/lookdev.js`, `src/inspection.js`, `src/GradeShader.js`: policy dei pass, sezioni e color grading.
+- `src/LookControls.jsx`, `src/MeshEditor.jsx`, `src/CategoryNavigation.jsx`: controlli lookdev, editor unico e navigazione 3D.
+- `src/materialSurface.js`, `src/surfacePicking.js`: facce, alpha, depth e selezione delle superfici visibili.
+- `src/ProgressiveBlur.jsx`, `src/workspaceLayout.js`, `src/mesh-workspace.css`: blur progressivo e layout adattivo.
+- `src/performanceMonitor.js`: adattamento della risoluzione e misure dei frame.
 - `src/CategoryPager.jsx`, `src/MaterialPicker.jsx` e `src/navigation.js`: categorie, slider discreto e raggruppamento delle superfici.
 - `src/Controls.jsx` e `src/controlMath.js`: controlli tattili e quantizzazione.
 - `src/cubeStage.js`: basamento e composizioni cubiche.

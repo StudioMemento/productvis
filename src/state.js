@@ -1,5 +1,7 @@
-export const TABS = ['product', 'scene', 'lighting', 'camera', 'motion', 'project'];
-export const TAB_LABELS = { product: 'Prodotto', scene: 'Scena', lighting: 'Luci', camera: 'Camera', motion: 'Movimento', project: 'Progetto' };
+import { DEFAULT_POST, DEFAULT_RENDER, DEFAULT_INSPECTION, DEFAULT_SECTION, validateLookdev } from './lookdev.js';
+import { DEFAULT_TRANSFORM, validateTransform } from './modelTransform.js';
+export const TABS = ['product', 'scene', 'lighting', 'camera', 'motion', 'post', 'inspect', 'render', 'project'];
+export const TAB_LABELS = { product: 'Prodotto', scene: 'Scena', lighting: 'Luci', camera: 'Camera', motion: 'Movimento', post: 'Post', inspect: 'Ispeziona', render: 'Render', project: 'Progetto' };
 export const PRESETS = {
   scene: [
     { id: 'ring', name: 'Ring' }, { id: 'void', name: 'Void' }, { id: 'studio', name: 'Studio' },
@@ -18,7 +20,7 @@ export const PRESETS = {
     { id: 'gloss', name: 'Lucido' }, { id: 'metal', name: 'Metallo' }, { id: 'ceramic', name: 'Ceramica' },
   ],
   motion: [
-    { id: 'still', name: 'Fermo' }, { id: 'turntable', name: 'Rotazione' },
+    { id: 'still', name: 'Fermo' }, { id: 'idle', name: 'Idle' }, { id: 'turntable', name: 'Rotazione' },
     { id: 'orbit', name: 'Orbita' }, { id: 'dolly', name: 'Avvicina' },
   ],
 };
@@ -57,6 +59,8 @@ export const DEFAULT_STATE = {
   camera: { preset: 'hero', ...CAMERA_ANGLES.hero, aperture: 5.6, exposure: -.15, autoFocus: true, focus: 6, focusPoint: null },
   motion: { preset: 'still', playing: false, speed: 1, direction: 1, loop: true, axis: 'y', amplitude: 360, travel: .3 },
   materials: {}, selectedMaterial: '', quality: 'auto', randomDelta: 35,
+  transform: { ...DEFAULT_TRANSFORM },
+  post: structuredClone(DEFAULT_POST), render: structuredClone(DEFAULT_RENDER), inspection: structuredClone(DEFAULT_INSPECTION), section: structuredClone(DEFAULT_SECTION),
 };
 export const clone = (v) => structuredClone(v);
 export const clamp = (v, low, high) => Math.max(low, Math.min(high, v));
@@ -68,9 +72,9 @@ export function applyPreset(state, category, id, original = null) {
   if (category === 'lighting') next.lighting = { ...state.lighting, preset: id, ...LIGHT_RIGS[id] };
   if (category === 'camera') {
     next.camera = { ...state.camera, preset: id, ...CAMERA_ANGLES[id], focusPoint: null, autoFocus: true };
-    if (['orbit', 'dolly'].includes(state.motion.preset)) next.motion.playing = false;
+    if (['orbit', 'dolly', 'idle'].includes(state.motion.preset)) next.motion.playing = false;
   }
-  if (category === 'motion') next.motion = { ...state.motion, preset: id, playing: id !== 'still' };
+  if (category === 'motion') next.motion = { ...state.motion, preset: id, playing: id !== 'still', amplitude: id === 'idle' ? 6 : Math.max(15,state.motion.amplitude) };
   if (category === 'product' && state.selectedMaterial) {
     const current = state.materials[state.selectedMaterial] || {};
     next.materials[state.selectedMaterial] = id === 'original'
@@ -90,7 +94,7 @@ export function validateProject(input) {
     scene: { composition: [0, 2], scale: [.55, 1.5], seed: [0, 100000], fog: [0, 1], particles: [0, 1], floorRoughness: [0, 1], reflection: [0, .8] },
     lighting: { intensity: [0, 2], rotation: [-180, 180], key: [0, 10], fill: [0, 10], rim: [0, 10], temperature: [2000, 9000], softness: [0, 100] },
     camera: { azimuth: [-180, 180], elevation: [1, 85], distance: [.25, 2.5], focal: [18, 150], aperture: [1.4, 16], exposure: [-2, 2], focus: [.2, 50] },
-    motion: { speed: [.25, 3], amplitude: [15, 360], travel: [.05, .6] },
+    motion: { speed: [.25, 3], amplitude: [1, 360], travel: [.05, .6] },
   };
   for (const category of Object.keys(ranges)) {
     if (!s[category] || !PRESETS[category].some(p => p.id === s[category].preset)) throw new Error('Un preset del progetto non è valido.');
@@ -106,9 +110,12 @@ export function validateProject(input) {
   result.motion.playing = s.motion.playing === true && s.motion.preset !== 'still';
   result.motion.loop = s.motion.loop !== false;
   result.motion.direction = s.motion.direction === -1 ? -1 : 1;
+  result.motion.amplitude = result.motion.preset==='idle' ? clamp(result.motion.amplitude,1,15) : Math.max(15,result.motion.amplitude);
   if (['x', 'y', 'z'].includes(s.motion.axis)) result.motion.axis = s.motion.axis;
   if (['auto', 'fluid', 'high'].includes(s.quality)) result.quality = s.quality;
   if (Number.isFinite(s.randomDelta)) result.randomDelta = Math.round(clamp(s.randomDelta, 0, 100));
+  validateLookdev(s, result);
+  result.transform = validateTransform(s.transform);
   result.name = typeof s.name === 'string' ? s.name.slice(0, 80) : 'Studio 01';
   for (const [key, mat] of Object.entries(s.materials || {}).slice(0, 500)) {
     if (!/^mat-\d+$/.test(key) || !mat || typeof mat !== 'object') continue;
@@ -117,6 +124,11 @@ export function validateProject(input) {
     for (const k of ['overlay', 'roughness', 'metalness', 'clearcoat', 'opacity']) if (Number.isFinite(mat[k])) m[k] = clamp(mat[k], 0, 1);
     if (Number.isFinite(mat.normalScale)) m.normalScale = clamp(mat.normalScale, 0, 2);
     if (Number.isInteger(mat.uvChannel)) m.uvChannel = clamp(mat.uvChannel, 0, 3);
+    for (const [k,min,max] of [['ior',1,2.5],['transmission',0,1],['thickness',0,5],['emissiveIntensity',0,3],['alphaCutoff',0,1]]) if (Number.isFinite(mat[k])) m[k] = clamp(mat[k],min,max);
+    if (isColor(mat.emissive)) m.emissive = mat.emissive;
+    if (['opaque','blend','mask'].includes(mat.alphaMode)) m.alphaMode = mat.alphaMode;
+    if (typeof mat.doubleSide === 'boolean') m.doubleSide = mat.doubleSide;
+    if (['source','front','back','double'].includes(mat.sideMode)) m.sideMode = mat.sideMode;
     result.materials[key] = m;
   }
   if (/^mat-\d+$/.test(s.selectedMaterial)) result.selectedMaterial = s.selectedMaterial;

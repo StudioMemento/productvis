@@ -5,7 +5,7 @@ import { boundedIndex, groupMaterials, locateMaterial, scrubIndex } from './navi
 
 const ICONS = { body: IconCar, wheels: IconWheel, glass: IconWindow, lights: IconBulb, interior: IconArmchair, details: IconLayersIntersect };
 
-export function MaterialPicker({ materials, selectedId, onSelect, disabled }) {
+export function MaterialPicker({ materials, selectedId, onSelect, disabled, compact = false }) {
   const groups = useMemo(() => groupMaterials(materials), [materials]);
   const { groupIndex, materialIndex } = locateMaterial(groups, selectedId);
   const group = groups[groupIndex], selected = group?.materials[materialIndex];
@@ -42,7 +42,7 @@ export function MaterialPicker({ materials, selectedId, onSelect, disabled }) {
   }, []);
   const chooseMaterial = index => { const target = group?.materials[boundedIndex(index, group.materials.length)]; if (!disabled && target && target.id !== selectedId) onSelect(target.id); };
   const end = e => { if (gesture.current?.id !== e.pointerId) return; gesture.current = null; setDragging(false); };
-  return <div className={`material-picker ${dragging ? 'is-dragging' : ''}`} ref={root} data-gesture-local>
+  return <div className={`material-picker ${dragging ? 'is-dragging' : ''} ${compact?'is-compact':''}`} ref={root} data-gesture-local>
     <div className="surface-reel-row">
       <Tool label="Zona precedente" disabled={disabled || groupIndex === 0} onClick={() => chooseGroup(groupIndex - 1)}><IconChevronLeft size={16}/></Tool>
       <div className="surface-reel" role="slider" tabIndex={disabled ? -1 : 0} aria-disabled={disabled} aria-label="Zona del prodotto" aria-valuemin={0} aria-valuemax={Math.max(0, groups.length - 1)} aria-valuenow={groupIndex} aria-valuetext={group?.label || 'Caricamento'} title="Trascina a scatti per scegliere la zona"
@@ -56,8 +56,8 @@ export function MaterialPicker({ materials, selectedId, onSelect, disabled }) {
       <Tool label="Zona successiva" disabled={disabled || groupIndex === groups.length - 1 || !groups.length} onClick={() => chooseGroup(groupIndex + 1)}><IconChevronRight size={16}/></Tool>
     </div>
     <div className="surface-detents" role="group" aria-label="Zone del prodotto">{groups.map((g,index) => <button key={g.id} type="button" aria-label={g.label} title={g.label} aria-pressed={index === groupIndex} className={index === groupIndex ? 'selected' : ''} disabled={disabled} onClick={() => chooseGroup(index)}><i/></button>)}</div>
-    <div className="surface-target" aria-live="polite" aria-label="Superficie in modifica">
-      <strong title={selected?.rawName}>{selected?.label || '—'}</strong>
+    <div className={`surface-target ${group?.materials.length===1 && selected?.label===group?.label ? 'is-redundant' : ''}`} aria-live="polite" aria-label="Superficie in modifica">
+      <strong className={compact?'sr-only':undefined} title={selected?.rawName}>{selected?.label || '—'}</strong>
       {group?.materials.length > 1 && <div className="surface-part-stepper"><Tool label="Superficie precedente" disabled={disabled || materialIndex === 0} onClick={() => chooseMaterial(materialIndex - 1)}><IconChevronLeft size={13}/></Tool><span>{materialIndex + 1}<i>/</i>{group.materials.length}</span><Tool label="Superficie successiva" disabled={disabled || materialIndex === group.materials.length - 1} onClick={() => chooseMaterial(materialIndex + 1)}><IconChevronRight size={13}/></Tool></div>}
     </div>
   </div>;

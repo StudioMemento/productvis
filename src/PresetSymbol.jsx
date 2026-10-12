@@ -26,13 +26,13 @@ const paths = {
   },
   motion: {
     still: 'M12 8v16 M20 8v16',
+    idle: 'M3 16q6-12 13 0t13 0 M10 7h12 M10 25h12',
     turntable: 'M5 17a11 7 0 1 0 5-6 M5 6v7h7 M14 13h4v7h-4z',
     orbit: 'M4 16a12 8 0 1 0 24 0a12 8 0 1 0-24 0 M12 16a4 4 0 1 0 8 0a4 4 0 1 0-8 0',
     dolly: 'M3 16h10 M9 12l4 4-4 4 M29 16H19 M23 12l-4 4 4 4 M16 5v4 M16 23v4',
   },
 };
 export function PresetSymbol({ category, id }) {
-  if (category === 'product') return <span className="finish-sample" aria-hidden="true" />;
   return <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" strokeWidth={id === 'particles' ? 3 : 1.3} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[category]?.[id]} /></svg>;
 }
 export function CompositionSymbol({ index }) {
