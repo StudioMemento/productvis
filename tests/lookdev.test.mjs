@@ -32,7 +32,7 @@ test('invalid lookdev files cannot request unsupported samples, frame rates or n
   p.state.materials={'mat-1':{ior:99,transmission:-1,emissive:'red',alphaMode:'custom',doubleSide:'true'}};
   const result=validateProject(p).state;
   assert.deepEqual(result.render,{...DEFAULT_STATE.render,resolution:.5});
-  assert.equal(result.post.strength,.2); assert.equal(result.post.contrast,1); assert.equal(result.post.tone,'aces');
+  assert.equal(result.post.strength,.1); assert.equal(result.post.contrast,1); assert.equal(result.post.tone,'aces');
   assert.deepEqual(result.section.x,DEFAULT_STATE.section.x); assert.equal(result.section.thickness,.02);
   assert.deepEqual(result.materials['mat-1'],{finish:'original',ior:2.5,transmission:0});
 });

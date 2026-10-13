@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomizePresentation } from '../src/presentation.js';
-import { DEFAULT_STATE, clone, makeProject, validateProject } from '../src/state.js';
+import { PRESETS, DEFAULT_STATE, clone, makeProject, validateProject } from '../src/state.js';
 
 const surface = { color: '#424752', overlay: .7, roughness: .32, metalness: .65, clearcoat: .25, opacity: 1, normalScale: .8, uvChannel: 1, finish: 'satin' };
 const metadata = [
@@ -29,7 +29,7 @@ test('successive random presentations are distinct, valid and survive a project 
     assert.deepEqual(validateProject(JSON.parse(JSON.stringify(makeProject(next, model)))), { state: next, model });
     scenes.add(next.scene.preset); state = next;
   }
-  assert.equal(scenes.size, 6);
+  assert.equal(scenes.size, PRESETS.scene.length);
 });
 
 test('random does not recolor transparent surfaces, glass, lights or unknown selections', () => {

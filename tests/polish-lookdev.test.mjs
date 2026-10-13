@@ -7,16 +7,17 @@ import { randomizePresentation } from '../src/presentation.js';
 import { motionSample } from '../src/motion.js';
 import { StudioEngine } from '../src/engine.js';
 
-test('bloom is limited to 0.2 unless explicitly unlocked, with a hard ceiling of 1 and safe legacy projects',()=>{
-  for(const look of POST_LOOKS){assert.ok(look.values.strength<=.2);assert.equal(look.values.bloomOverride,false);}
-  for(const [override,input,expected] of [[false,1,.2],[true,.7,.7],[true,5,1],[false,-1,0]]) {
+test('bloom has a hard ceiling of 0.1 in controls, presets and legacy projects, including old overrides',()=>{
+  for(const look of POST_LOOKS){assert.ok(look.values.strength<=.1);assert.equal(look.values.bloomOverride,false);}
+  for(const [override,input,expected] of [[false,1,.1],[true,.7,.1],[true,5,.1],[false,-1,0],[false,.075,.075],[true,NaN,DEFAULT_STATE.post.strength]]) {
     const state=clone(DEFAULT_STATE);Object.assign(state.post,{bloomOverride:override,strength:input});
     assert.equal(bloomStrength(state.post),expected);
-    assert.equal(validateProject(makeProject(state,{type:'demo'})).state.post.strength,expected);
+    const loaded=validateProject(makeProject(state,{type:'demo'})).state;
+    assert.equal(loaded.post.strength,expected);assert.equal(loaded.post.bloomOverride,false);
   }
   const legacy=makeProject(clone(DEFAULT_STATE),{type:'demo'});delete legacy.state.post.bloomOverride;legacy.state.post.strength=.8;
-  assert.equal(validateProject(legacy).state.post.strength,.2);
-  const saved=clone(DEFAULT_STATE);Object.assign(saved.post,{bloomOverride:true,strength:.73});
+  assert.equal(validateProject(legacy).state.post.strength,.1);
+  const saved=clone(DEFAULT_STATE);saved.post.strength=.075;
   assert.deepEqual(validateProject(makeProject(saved,{type:'demo'})).state,saved);
 });
 
@@ -27,7 +28,7 @@ test('random includes product animation, camera motion and idle; resets manual b
     Object.assign(state.post,{bloomOverride:true,strength:1});
     const next=randomizePresentation(state,[],{delta:100,random});
     assert.notEqual(next.motion.preset,state.motion.preset);assert.equal(next.motion.playing,true);assert.equal(next.motion.axis,'y');
-    assert.equal(next.post.bloomOverride,false);assert.ok(next.post.strength<=.2);
+    assert.equal(next.post.bloomOverride,false);assert.ok(next.post.strength<=.1);
     if(next.camera.preset==='macro')assert.ok(['idle','dolly'].includes(next.motion.preset));
     seen.add(next.motion.preset);state=next;
   }

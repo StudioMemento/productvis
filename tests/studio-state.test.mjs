@@ -53,15 +53,15 @@ test('untrusted projects reject incompatible formats and clamp unsafe parameters
 test('bounded motion loops return to origin; one-shot motion stops at endpoint', () => {
   const motion = { ...DEFAULT_STATE.motion, preset: 'turntable', amplitude: 90 };
   assert.equal(motionSample(motion, 0).angle, 0);
-  assert.ok(Math.abs(motionSample(motion, 4.5).angle - Math.PI / 2) < 1e-9);
-  assert.ok(Math.abs(motionSample(motion, 9).angle) < 1e-9);
+  assert.ok(Math.abs(motionSample(motion, motion.duration/2).angle - Math.PI / 2) < 1e-9);
+  assert.ok(Math.abs(motionSample(motion, motion.duration).angle) < 1e-9);
   const end = motionSample({ ...motion, loop: false }, 99);
   assert.equal(end.ended, true); assert.equal(end.angle, Math.PI / 2);
 });
 
 test('dolly responds to direction and travel while maintaining positive distance', () => {
   const motion = { ...DEFAULT_STATE.motion, preset: 'dolly', travel: .6, loop: false };
-  assert.equal(motionSample(motion, 6).dolly, .4);
-  assert.equal(motionSample({ ...motion, direction: -1 }, 6).dolly, 1.6);
-  assert.equal(motionSample(motion, 6).ended, true);
+  assert.equal(motionSample(motion, motion.duration).dolly, .4);
+  assert.equal(motionSample({ ...motion, direction: -1 }, motion.duration).dolly, 1.6);
+  assert.equal(motionSample(motion, motion.duration).ended, true);
 });

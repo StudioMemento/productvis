@@ -23,6 +23,10 @@ import { DEFAULT_STATE, clone, clamp, friendlyMaterialName } from './state.js';
 import { motionSample } from './motion.js';
 import { createRenderLoop } from './renderLoop.js';
 import { renderPixelRatio } from './renderBudget.js';
+import { perspectiveFit } from './cameraFraming.js';
+import { CUSTOM_SCENES, createEnvironmentStage } from './environmentStage.js';
+import { canRecordVideo, recordCanvas, videoSettings } from './playblast.js';
+import { ModelAnimation } from './modelAnimation.js';
 
 const D = THREE.MathUtils.degToRad;
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -54,16 +58,16 @@ export class StudioEngine {
     this.pointerDown = e => { this.pointerStart = [e.clientX, e.clientY]; this.hoverTimer && clearTimeout(this.hoverTimer); this.events.onHover?.(null); };
     this.pointerUp = e => {
       if (!this.renderer || !this.pointerStart || Math.hypot(e.clientX - this.pointerStart[0], e.clientY - this.pointerStart[1]) > 7) return;
-      this.pick(e, this.focusMode ? 'focus' : 'select'); this.pointerStart = null;
+      if (!this.presentation && !this.recording) this.pick(e, this.focusMode ? 'focus' : 'select'); this.pointerStart = null;
     };
-    this.doubleClick = e => this.pick(e, 'focus');
+    this.doubleClick = e => { if (!this.presentation && !this.recording) this.pick(e, 'focus'); };
     this.canvas.addEventListener('pointerdown', this.pointerDown);
     this.canvas.addEventListener('pointerup', this.pointerUp);
     this.canvas.addEventListener('dblclick', this.doubleClick);
     this.pointerMove = e => {
       if (e.pointerType !== 'mouse' || e.buttons || this.manual || this.presentation || this.focusMode) return;
       this.events.onPointerPosition?.(e.clientX, e.clientY);
-      if (performance.now() - this.hoverTime < 55) return;
+      if (performance.now() - this.hoverTime < 100) return;
       this.hoverTime = performance.now(); this.pick(e, 'hover');
     };
     this.pointerLeave = () => { clearTimeout(this.hoverTimer); this.events.onHover?.(null); };
@@ -74,7 +78,7 @@ export class StudioEngine {
     if (this.renderer) this.contactShadow = new ContactShadow(this.scene,this.coarse);
     this.loader = new GLTFLoader();
     this.loop = createRenderLoop({ render: time => this.tick(time) });
-    this.visibilityChanged = () => { this.lastFrame = performance.now(); this.monitor.reset(); this.loop.setPaused(document.hidden || !!this.contextUnavailable); };
+    this.visibilityChanged = () => { this.lastFrame = performance.now(); this.monitor.reset(); this.loop.setPaused(document.hidden || !!this.contextUnavailable || !!this.recording); };
     document.addEventListener('visibilitychange', this.visibilityChanged);
     this.visibilityChanged();
     this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(canvas.parentElement);
@@ -91,7 +95,7 @@ export class StudioEngine {
     // MSAA must be applied to the HDR composer targets, not the default canvas.
     const counts = context.getInternalformatParameter(context.RENDERBUFFER, context.RGBA16F, context.SAMPLES);
     this.supportedSamples = Array.from(counts || []).filter(n => [2,4,8].includes(n));
-    this.events.onCapabilities?.({ samples: this.supportedSamples, coarse: this.coarse });
+    this.events.onCapabilities?.({ samples: this.supportedSamples, coarse: this.coarse,recording:canRecordVideo() });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1;
@@ -108,18 +112,24 @@ export class StudioEngine {
     this.controls.minDistance = 1.1; this.controls.maxDistance = 35;
     this.controls.maxPolarAngle = D(88); this.controls.minPolarAngle = D(3);
     this.controls.enablePan = false; this.controls.rotateSpeed = .65;
-    this.controls.addEventListener('start', () => { this.transition = false; this.manual = true; this.events.onManualMove?.(); this.invalidate(); });
-    this.controls.addEventListener('change', () => { if (!this.rendering) this.invalidate(); });
+    this.controls.addEventListener('start', () => {
+      this.interruptedTransition=this.transition;this.transition=false;this.manual=true;this.manualChanged=false;this.settling=false;
+      this.clearOrbitInertia();this.invalidate();
+    });
+    this.controls.addEventListener('change', () => {
+      if(this.manual&&!this.clearingInertia&&!this.manualChanged){this.manualChanged=true;this.events.onManualMove?.();}
+      if(!this.rendering)this.invalidate();
+    });
     this.controls.addEventListener('end', () => {
-      this.manual = false;
-      const offset = this.camera.position.clone().sub(this.controls.target), length = offset.length();
-      const reference = this.desiredPosition.distanceTo(this.desiredTarget);
-      this.events.onCameraChange?.({ azimuth: THREE.MathUtils.radToDeg(Math.atan2(offset.x, offset.z)), elevation: THREE.MathUtils.radToDeg(Math.asin(offset.y / length)), distance: clamp(this.config.camera.distance * length / reference, .25, 2.5) });
+      this.manual=false;
+      if(this.manualChanged){this.settling=true;this.settleStart=performance.now();}
+      else if(this.interruptedTransition)this.transition=true;
+      this.invalidate();
     });
     this.composer = new EffectComposer(this.renderer);
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.bokeh = new BokehPass(this.scene, this.camera, { focus: 8, aperture: .00007, maxblur: .005 });
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(800, 600), .2, .3, 1.6);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(800, 600), .06, .3, 1.6);
     this.grade = new ShaderPass(GradeShader);
     this.outputPass = new OutputPass();
     this.composer.addPass(this.renderPass); this.composer.addPass(this.bokeh); this.composer.addPass(this.bloom); this.composer.addPass(this.grade); this.composer.addPass(this.outputPass);
@@ -212,12 +222,15 @@ export class StudioEngine {
     const largest = Math.max(size.x, size.y, size.z);
     if (!Number.isFinite(largest) || largest <= 0) { this.disposeObject(object); throw new Error('Il modello non contiene una geometria visibile.'); }
     const wrapper = new THREE.Group(); wrapper.add(object);
-    object.scale.multiplyScalar(4.7 / largest); object.updateMatrixWorld(true);
+    // Normalize outside animated glTF nodes; root tracks retain authored transforms.
+    wrapper.scale.setScalar(4.7 / largest); wrapper.updateMatrixWorld(true);
     bounds = new THREE.Box3().setFromObject(object); size = bounds.getSize(new THREE.Vector3());
     if (isDemo && size.x > size.z) { wrapper.rotation.y = Math.PI / 2; wrapper.updateMatrixWorld(true); }
     bounds = new THREE.Box3().setFromObject(wrapper); const center = bounds.getCenter(new THREE.Vector3());
     wrapper.position.set(-center.x, -bounds.min.y + .025, -center.z); wrapper.updateMatrixWorld(true);
+    this.animations?.dispose();
     if (this.model) { this.releaseInspection(); this.product.remove(this.model); this.disposeObject(this.model); }
+    this.animations = new ModelAnimation(object,gltf.animations);
     this.materials.clear(); this.meshes = []; this.sectionKey = null; let fallbackIndex = manifest.materials?.length || 0;
     const clones = new Map(); this.selectedKey = null;
     wrapper.traverse(mesh => {
@@ -278,36 +291,41 @@ export class StudioEngine {
     if (isDemo && selected) initial[selected] = { ...initial[selected], color: '#4c515b', overlay: 1, roughness: .24, metalness: .75, clearcoat: .8, finish: 'satin' };
     this.events.onLoading?.(100);
     this.events.onStatus?.(this.renderer ? 'ready' : 'fallback');
-    return { materials, selected, initial, buffer, triangles: this.meshes.reduce((sum, m) => sum + (m.geometry.index?.count || m.geometry.attributes.position.count) / 3, 0), title: manifest.asset?.extras?.title || '' };
+    return { materials, selected, initial, buffer, animations:this.animations.metadata, triangles: this.meshes.reduce((sum, m) => sum + (m.geometry.index?.count || m.geometry.attributes.position.count) / 3, 0), title: manifest.asset?.extras?.title || '' };
   }
 
   setState(config, { immediate = false } = {}) {
     const previous = this.config; this.config = config;
     const force = immediate || !this.sceneKey;
     // UI-only changes (name, delta) must not touch GPU resources or wake a sleeping scene.
-    if (!force && ['scene', 'lighting', 'materials', 'camera', 'motion', 'quality', 'selectedMaterial', 'post', 'render', 'inspection', 'section', 'transform'].every(key => previous[key] === config[key])) return;
+    if (!force && ['scene', 'lighting', 'materials', 'camera', 'motion', 'animation', 'quality', 'selectedMaterial', 'post', 'render', 'inspection', 'section', 'transform'].every(key => previous[key] === config[key])) return;
+    if(force || previous.animation!==config.animation){
+      if(this.animations?.setState(config.animation))this.contactShadow?.invalidate();
+      this.events?.onAnimationTime?.(this.animations?.cursor||0);
+    }
     const placementChanged = force || previous.transform !== config.transform;
     if (placementChanged && this.placement) {
       applyModelTransform(this.placement, config.transform);
       this.contactShadow?.invalidate();
     }
-    const sceneKey = JSON.stringify([config.scene.preset, config.scene.composition, config.scene.scale, config.scene.seed]);
+    const sceneKey = JSON.stringify([config.scene.preset, config.scene.composition, config.scene.scale, config.scene.seed,config.scene.density,config.scene.height,config.scene.spread]);
     if (sceneKey !== this.sceneKey) { this.buildStage(config.scene); this.sceneKey = sceneKey; }
     if (force || previous.lighting !== config.lighting) this.applyLights(config.lighting);
     const bg = config.scene.preset === 'cubes' ? '#101722' : config.scene.preset === 'void' ? '#07090c' : config.scene.preset === 'studio' ? '#303741' : '#131820';
-    this.backgroundColor.set(bg); this.sceneFog.color.set(bg);
+    this.backgroundColor.set(config.scene.background||bg); this.sceneFog.color.copy(this.backgroundColor);
     this.scene.background = config.render.alpha ? null : this.backgroundColor;
     this.scene.fog = config.render.alpha ? null : this.sceneFog;
     this.renderer?.setClearColor(0x000000, config.render.alpha ? 0 : 1);
     this.stage.visible = !config.render.alpha;
     this.sceneFog.density = config.scene.preset === 'void' ? .035 : .012 + config.scene.fog * .075;
     this.floorMaterial.roughness = config.scene.floorRoughness;
-    this.floorMaterial.color.set(config.scene.preset === 'studio' ? '#45494f' : '#1b1f25');
-    this.floor.visible = !config.render.alpha && !['void', 'cubes'].includes(config.scene.preset);
-    if (this.cubeBaseMaterial) this.cubeBaseMaterial.roughness = config.scene.floorRoughness;
+    this.floorMaterial.color.set(config.scene.groundColor||'#1b1f25');
+    this.floor.visible = !config.render.alpha && this.customStage?.floorVisible!==false && !['void', 'cubes','road'].includes(config.scene.preset);
+    if (this.cubeBaseMaterial) {this.cubeBaseMaterial.roughness = config.scene.floorRoughness;this.cubeBaseMaterial.color.set(config.scene.groundColor);}
+    this.customStage?.update(config.scene,this.environmentTime||0);
     if (this.reflector) {
-      this.reflector.visible = !config.render.alpha && config.inspection.view === 'pbr' && config.scene.preset !== 'void' && config.scene.reflection > .015 && config.quality !== 'fluid';
-      const surfaceScale = config.scene.preset === 'cubes' ? (PLINTH_SIZE - .14) / 90 : 1;
+      this.reflector.visible = !config.render.alpha && config.inspection.view === 'pbr' && !['void','road'].includes(config.scene.preset) && config.scene.reflection > .015 && config.quality !== 'fluid';
+      const surfaceScale = config.scene.preset === 'cubes' ? (PLINTH_SIZE - .14) / 90 : (this.customStage?.reflectionSpan||90)/90;
       this.reflector.scale.set(surfaceScale, surfaceScale, 1);
       this.reflector.position.y = config.scene.preset === 'cubes' ? .007 : -.008;
       this.reflector.material.uniforms.pvReflection.value = config.scene.reflection;
@@ -345,8 +363,8 @@ export class StudioEngine {
     if (this.renderer) this.renderer.toneMappingExposure = Math.pow(2, config.camera.exposure) * 1.05;
     if (this.bokeh) {
       const blur = clamp((16 - config.camera.aperture) / 14.6, 0, 1);
-      this.bokeh.uniforms.aperture.value = blur * .00013;
-      this.bokeh.uniforms.maxblur.value = blur * .009;
+      this.bokeh.uniforms.aperture.value = blur * .00018 * (config.camera.bokeh??.5);
+      this.bokeh.uniforms.maxblur.value = blur * .014 * (config.camera.bokeh??.5);
       this.bokeh.enabled = postPolicy(config).dof;
     }
     this.applyPost();
@@ -356,18 +374,19 @@ export class StudioEngine {
     if (force || config.render !== previous.render || config.quality !== previous.quality) {
       this.monitor.reset(); this.monitor.scale = 1; this.resize();
     }
-    const cameraKey = JSON.stringify([config.camera.preset, config.camera.azimuth, config.camera.elevation, config.camera.distance, config.camera.focal, config.scene.preset]);
+    const cameraKey = this.cameraSignature(config.camera,config.scene.preset);
     const cameraChanged = this.cameraKey !== cameraKey || immediate;
     const resetMotion = force || config.motion.preset !== previous.motion.preset || config.motion.axis !== previous.motion.axis || (cameraChanged && config.motion.playing);
     if (resetMotion || config.motion.preset === 'still') { this.product.rotation.set(0, 0, 0); this.product.position.set(0, 0, 0); }
     if (this.model && (placementChanged || resetMotion)) this.motionGroundY = worldBounds(this.model).min.y;
-    if (cameraChanged) { this.frameCamera(config.camera); this.transition = true; this.cameraKey = cameraKey; }
+    if (cameraChanged) { this.frameCamera(config.camera); this.clearOrbitInertia(); this.settling=false; this.transition = true; this.cameraKey = cameraKey; }
     if (immediate) { this.camera.position.copy(this.desiredPosition); this.target.copy(this.desiredTarget); this.controls?.target.copy(this.target); this.camera.lookAt(this.target); this.transition = false; }
     if (resetMotion) {
-      this.motionTime = 0; this.motionBaseAngle = 0;
+      this.motionTime = (config.motion.cursor||0)*(config.motion.duration||12); this.motionBaseAngle = 0;
       this.motionPosition = (cameraChanged?this.desiredPosition:this.camera.position).clone(); this.motionTarget = (cameraChanged?this.desiredTarget:this.controls?.target || this.target).clone();
       this.contactShadow?.invalidate();
-    } else if (config.motion.direction !== previous.motion.direction || config.motion.amplitude !== previous.motion.amplitude || config.motion.travel !== previous.motion.travel || config.motion.loop !== previous.motion.loop || (config.motion.playing && !previous.motion.playing)) {
+    } else if (config.motion.direction !== previous.motion.direction || config.motion.amplitude !== previous.motion.amplitude || config.motion.travel !== previous.motion.travel || config.motion.loop !== previous.motion.loop || config.motion.easing !== previous.motion.easing || config.motion.duration !== previous.motion.duration || (config.motion.playing && !previous.motion.playing)) {
+      if(config.motion.duration!==previous.motion.duration)this.motionTime=this.motionTime/(previous.motion.duration||12)*(config.motion.duration||12);
       if (config.motion.playing && motionSample(config.motion, this.motionTime).ended) this.motionTime = 0;
       const sample = motionSample(config.motion, this.motionTime);
       this.motionBaseAngle = this.product.rotation[config.motion.axis] - sample.angle;
@@ -377,7 +396,8 @@ export class StudioEngine {
       if (['dolly','idle'].includes(config.motion.preset)) offset.divideScalar(sample.dolly);
       this.motionPosition = this.motionTarget.clone().add(offset);
     }
-    this.setSelected(config.selectedMaterial, this.activeTab === 'product');
+    if(config.motion.cursor!==previous.motion.cursor){this.motionTime=config.motion.cursor*(config.motion.duration||12);this.scrubPending=true;}
+    this.setSelected(config.selectedMaterial, this.activeTab === 'product' && !this.presentation);
     this.invalidate();
   }
 
@@ -465,19 +485,19 @@ export class StudioEngine {
     const t = clamp((s.temperature - 2000) / 7000, 0, 1);
     const keyColor = new THREE.Color('#ffbe7a').lerp(new THREE.Color('#c3dcff'), t);
     const tint = { warm: '#ffb84f', neutral: '#f2f0e7', cool: '#77aaff' }[s.tint];
-    this.key.color.copy(keyColor); this.key.intensity = s.key * s.intensity;
-    this.fill.color.set(s.preset === 'bicolor' ? '#65aaff' : '#c9d7ef'); this.fill.intensity = s.fill * s.intensity;
-    this.rim.color.set(tint); this.rim.intensity = s.rim * s.intensity;
-    this.key.position.set(s.preset === 'split' ? -6 : -4, s.preset === 'top' ? 9 : 7, s.preset === 'top' ? .5 : 5);
-    this.lights.rotation.y = D(s.rotation);
-    this.key.shadow.radius = 1 + s.softness * .085;
-    this.hemi.intensity = .28 + s.fill * .18 * s.intensity;
-    this.scene.environmentIntensity = .35 + .4 * s.intensity;
+    this.key.color.copy(keyColor);if(s.keyColor)this.key.color.set(s.keyColor);this.key.intensity=s.key*s.intensity;
+    this.fill.color.set(s.fillColor||(s.preset==='bicolor'?'#65aaff':'#c9d7ef'));this.fill.intensity=s.fill*s.intensity;
+    this.rim.color.set(s.rimColor||tint);this.rim.intensity=s.rim*s.intensity;
+    const elevation=D(s.elevation??52),radius=9;
+    this.key.position.set((s.preset==='split'?-1:-.65)*radius*Math.cos(elevation),radius*Math.sin(elevation),radius*.75*Math.cos(elevation));
+    this.lights.rotation.y=D(s.rotation);this.key.shadow.radius=1+s.softness*.085;
+    this.hemi.intensity=(s.ambient??.4)*s.intensity;this.scene.environmentIntensity=(s.environment??.65)*s.intensity;
   }
 
   buildStage(s) {
     while (this.stage.children.length) { const item = this.stage.children[0]; this.stage.remove(item); this.disposeObject(item); }
-    this.ring = null; this.outerRing = null; this.particles = null; this.cubeBaseMaterial = null;
+    this.ring = null; this.outerRing = null; this.particles = null; this.cubeBaseMaterial = null; this.customStage=null;this.environmentTime=0;
+    if(CUSTOM_SCENES.includes(s.preset)){this.customStage=createEnvironmentStage(s,this.coarse);this.stage.add(this.customStage.group);}
     if (s.preset === 'ring') {
       const base = new THREE.Mesh(new THREE.CylinderGeometry(3.3, 3.35, .10, 96), new THREE.MeshStandardMaterial({ color: '#15191f', metalness: .65, roughness: .3 }));
       base.position.y = -.032; base.receiveShadow = true; this.stage.add(base);
@@ -509,15 +529,46 @@ export class StudioEngine {
     const bounds = this.model ? worldBounds(this.model) : null;
     const size = bounds ? bounds.getSize(V()) : this.modelSize;
     const center = bounds ? bounds.getCenter(V()) : V(0, size.y*.5+.025, 0);
-    const fov = D(this.camera.fov), width = Math.max(size.x, size.z);
+    const fov = D(this.camera.fov);
     const cubeDepth = this.config.scene.preset === 'cubes' ? .8 : 0;
-    const fit = Math.max(width / (2 * Math.tan(fov / 2) * this.camera.aspect * .8 * (w - right) / w), (size.y + cubeDepth) / (2 * Math.tan(fov / 2) * .72 * (h - bottom) / h));
-    const distance = fit * s.distance;
     const target = center.clone(); target.y += .015 - cubeDepth * .25;
-    if (s.preset === 'macro') target.copy(center).add(V(size.x * .22, -size.y * .08, size.z * .36));
+    if (['macro','detail'].includes(s.preset)) target.copy(center).add(V(size.x * .22, -size.y * .08, size.z * .36));
+    if(s.targetPoint)target.fromArray(s.targetPoint);
+    const direction = V(Math.sin(D(s.azimuth))*Math.cos(D(s.elevation)),Math.sin(D(s.elevation)),Math.cos(D(s.azimuth))*Math.cos(D(s.elevation)));
+    const framingBounds = bounds?.clone() || new THREE.Box3().setFromCenterAndSize(center,size);
+    framingBounds.min.y -= cubeDepth;
+    let fit = perspectiveFit(framingBounds,target,direction,fov,this.camera.aspect,(w-right)/w,(h-bottom)/h);
+    if (this.config.motion.playing && ['turntable','orbit'].includes(this.config.motion.preset)) {
+      // Preserve room for the length revealed by rotation after the initial shot.
+      fit = Math.max(fit,Math.max(size.x,size.z)/(2*Math.tan(fov/2)*this.camera.aspect*.8*(w-right)/w));
+    }
+    const distance = s.orbitRadius || fit * s.distance;
     this.desiredTarget.copy(target);
-    this.desiredPosition.set(Math.sin(D(s.azimuth)) * Math.cos(D(s.elevation)) * distance, Math.sin(D(s.elevation)) * distance, Math.cos(D(s.azimuth)) * Math.cos(D(s.elevation)) * distance).add(target);
+    this.desiredPosition.copy(direction).multiplyScalar(distance).add(target);
     this.controls && (this.controls.maxDistance = Math.max(30, fit * 2.5));
+  }
+
+  cameraSignature(camera,scene=this.config.scene.preset) {
+    return JSON.stringify([camera.preset,camera.azimuth,camera.elevation,camera.distance,camera.focal,camera.targetPoint,camera.orbitRadius,scene]);
+  }
+
+  clearOrbitInertia() {
+    if(!this.controls?.update)return;
+    const position=this.camera.position.clone(),target=this.controls.target.clone(),damping=this.controls.enableDamping;
+    this.clearingInertia=true;this.controls.enableDamping=false;this.controls.update();
+    this.camera.position.copy(position);this.controls.target.copy(target);this.controls.update();
+    this.controls.enableDamping=damping;this.clearingInertia=false;
+  }
+
+  syncManualCamera() {
+    this.settling=false;this.clearOrbitInertia();
+    const offset=this.camera.position.clone().sub(this.controls.target),length=offset.length();
+    if(!length)return;
+    const camera={...this.config.camera,azimuth:THREE.MathUtils.radToDeg(Math.atan2(offset.x,offset.z)),
+      elevation:THREE.MathUtils.radToDeg(Math.asin(clamp(offset.y/length,-1,1))),orbitRadius:length};
+    this.desiredPosition.copy(this.camera.position);this.desiredTarget.copy(this.controls.target);
+    this.cameraKey=this.cameraSignature(camera);
+    this.events.onCameraChange?.(camera);
   }
 
   modelPlacementAction(action) {
@@ -526,6 +577,7 @@ export class StudioEngine {
   }
 
   resize() {
+    if(this.recording)return;
     const bounds = this.canvas.parentElement.getBoundingClientRect();
     const width = Math.max(1, bounds.width), height = Math.max(1, bounds.height);
     const viewportChanged = !this.resolutionKey || width !== this.size.width || height !== this.size.height;
@@ -549,9 +601,13 @@ export class StudioEngine {
   }
 
   invalidate() { this.dirty = true; if (this.renderer && !this.contextUnavailable) this.loop?.invalidate(); }
-  setWorkspace(insets) { this.workspaceInsets = insets; this.frameCamera(this.config.camera); this.transition = true; this.invalidate(); }
+  setWorkspace(insets) {
+    if(this.workspaceInsets&&Math.abs(this.workspaceInsets.right-insets.right)<1&&Math.abs(this.workspaceInsets.bottom-insets.bottom)<1)return;
+    this.workspaceInsets = insets;if(this.recording)return;
+    if(!this.manual&&!this.settling){this.frameCamera(this.config.camera);this.clearOrbitInertia();this.transition=true;}this.invalidate();
+  }
   setTab(tab) { this.activeTab = tab; this.setSelected(this.config.selectedMaterial, tab === 'product'); }
-  setPresentation(value) { this.presentation = value; this.events.onHover?.(null); this.frameCamera(this.config.camera); this.transition = true; this.invalidate(); }
+  setPresentation(value) { if(this.presentation===value)return;this.presentation = value; this.events.onHover?.(null); if(this.recording)return;this.frameCamera(this.config.camera);this.clearOrbitInertia();this.transition = true; this.invalidate(); }
   setFocusMode(value) { this.focusMode = value; this.canvas.style.cursor = value ? 'crosshair' : 'grab'; }
 
   setSelected(id, visible) {
@@ -573,8 +629,8 @@ export class StudioEngine {
     const rect = this.canvas.getBoundingClientRect(), ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), this.camera);
     const hit = visibleIntersection(ray.intersectObjects(this.meshes, false), this.worldPlanes, this.config.inspection.view === 'normals' ? undefined : visibleSurfaceHit);
-    if (!hit) { if (action === 'hover' || action === 'select') this.events.onHover?.(null); return; }
-    if (action === 'focus') { this.events.onFocus?.(hit.point.toArray()); this.setFocusMode(false); return; }
+    if (!hit) { if (action === 'hover' || action === 'select') this.events.onHover?.(null); if(action==='select')this.events.onEmpty?.(); return; }
+    if (action === 'focus') { const offset=this.camera.position.clone().sub(this.controls.target),length=offset.length();this.events.onFocus?.(hit.point.toArray(),length*.85,{azimuth:THREE.MathUtils.radToDeg(Math.atan2(offset.x,offset.z)),elevation:THREE.MathUtils.radToDeg(Math.asin(clamp(offset.y/length,-1,1)))}); this.setFocusMode(false); return; }
     const originals = hit.object.userData.pvBaseMaterials;
     const material = Array.isArray(originals) ? originals[hit.face.materialIndex] : originals;
     const id = material?.userData.pv?.id;
@@ -592,20 +648,22 @@ export class StudioEngine {
     const delta = Math.min((time - this.lastFrame) / 1000, .05); this.lastFrame = time;
     if (this.transition) {
       const alpha = 1 - Math.exp(-delta * 9);
-      this.camera.position.lerp(this.desiredPosition, alpha); this.controls.target.lerp(this.desiredTarget, alpha);
+      this.camera.position.lerp(this.desiredPosition, alpha); this.controls.target.lerp(this.desiredTarget, alpha);this.camera.lookAt(this.controls.target);
       if (this.camera.position.distanceTo(this.desiredPosition) < .003 && this.controls.target.distanceTo(this.desiredTarget) < .003) {
         this.transition = false;
         if (this.motionFramePending && ['orbit','dolly','idle'].includes(this.config.motion.preset)) {
-          this.motionTime = 0; this.motionPosition = this.camera.position.clone(); this.motionTarget = this.controls.target.clone();
+          this.motionTime = (this.config.motion.cursor||0)*(this.config.motion.duration||12); this.motionPosition = this.camera.position.clone(); this.motionTarget = this.controls.target.clone();
         }
         this.motionFramePending = false;
       }
     }
-    const controlsChanged = this.controls?.update();
+    const controlsChanged = (this.manual||this.settling) ? this.controls?.update() : false;
+    if(this.settling && (!controlsChanged || time-this.settleStart>1800))this.syncManualCamera();
     const motion = this.config.motion;
-    const moving = this.ready && motion.playing && motion.preset !== 'still' && !this.manual && !this.transition;
-    if (moving) {
-      this.motionTime += delta * motion.speed;
+    const moving = this.ready && motion.playing && motion.preset !== 'still' && !this.manual && !this.settling && !this.transition;
+    if (moving || this.scrubPending) {
+      if(moving)this.motionTime += delta * motion.speed;
+      this.scrubPending=false;
       const sample = motionSample(motion, this.motionTime);
       if (motion.preset === 'turntable') {
         this.product.rotation[motion.axis] = (this.motionBaseAngle || 0) + sample.angle;
@@ -624,24 +682,78 @@ export class StudioEngine {
         const offset = (this.motionPosition || this.desiredPosition).clone().sub(target).multiplyScalar(sample.dolly);
         this.camera.position.copy(target).add(offset); this.camera.lookAt(target);
       }
-      if (sample.ended) this.events.onMotionEnd?.();
+      if (sample.ended&&!this.recording) this.events.onMotionEnd?.();
     }
+    const animation=this.animations?.update(this.recording?0:delta);
+    if(animation?.ended&&!this.recording)this.events?.onAnimationEnd?.(this.animations.cursor);
+    if(animation?.moving&&!this.recording&&time-(this.lastAnimationReport||0)>100){this.lastAnimationReport=time;this.events?.onAnimationTime?.(this.animations.cursor);}
     const drifting = this.stage.visible && this.particles?.visible && this.particles.material.opacity > 0;
     if (drifting) this.particles.rotation.y += delta * .007;
+    this.environmentTime=(this.environmentTime||0)+delta;
+    const environmentMoving=this.stage.visible&&this.customStage?.update(this.config.scene,this.environmentTime);
     if (this.bokeh?.enabled) {
       const point = this.config.camera.focusPoint ? this.focusPoint.fromArray(this.config.camera.focusPoint) : this.controls.target;
       this.bokeh.uniforms.focus.value = this.config.camera.autoFocus ? this.camera.position.distanceTo(point) : this.config.camera.focus;
     }
     if (this.worldPlanes.length) this.updateSectionTransform();
     this.renderer.info.reset();
-    this.contactShadow?.update(this.renderer,this.config,time,moving && motion.preset==='turntable');
+    this.contactShadow?.update(this.renderer,this.config,time,(moving && motion.preset==='turntable')||animation?.moving,!!this.recording&&(motion.preset==='turntable'||!!this.config.animation?.playing));
     this.composer.render(delta);
     this.rendering = false;
-    const active = !!(this.transition || this.manual || controlsChanged || moving || drifting);
+    const active = !!(this.transition || this.manual || this.settling || controlsChanged || moving || (animation?.moving&&!animation.ended) || drifting || environmentMoving);
     const report = this.monitor.sample(time, targetFps, this.config.render.adaptive);
-    if (report) { this.reportStats(report); if (report.changed) this.resize(); }
+    if (report && !this.recording) { this.reportStats(report); if (report.changed) this.resize(); }
     if (!active) { this.monitor.reset(); this.reportStats({ idle: true }); }
     return active;
+  }
+
+  rewindMotion() {
+    this.motionTime=0;this.motionBaseAngle=0;this.product.rotation.set(0,0,0);this.product.position.set(0,0,0);
+    if(['orbit','dolly','idle'].includes(this.config.motion.preset)&&this.motionPosition){
+      this.camera.position.copy(this.motionPosition);this.controls.target.copy(this.motionTarget);this.camera.lookAt(this.controls.target);
+    }
+    this.scrubPending=true;this.transition=false;this.clearOrbitInertia();this.contactShadow?.invalidate();this.invalidate();
+  }
+
+  async captureVideo(options) {
+    if(!this.renderer||!this.ready||this.contextUnavailable||this.recording)throw new Error('Il render 3D non è pronto.');
+    if(this.config.render.alpha)throw new Error('Disattiva Alpha per il video; PNG conserva la trasparenza.');
+    const {width,height,fps}=videoSettings(options);
+    const saved={config:this.config,camera:this.camera.clone(),target:this.controls.target.clone(),size:{...this.size},dpr:this.renderer.getPixelRatio(),presentation:this.presentation,
+      position:this.product.position.clone(),quaternion:this.product.quaternion.clone(),desiredPosition:this.desiredPosition.clone(),desiredTarget:this.desiredTarget.clone(),
+      motionPosition:this.motionPosition?.clone(),motionTarget:this.motionTarget?.clone(),motionTime:this.motionTime,motionBaseAngle:this.motionBaseAngle,animationTime:this.animations?.time,
+      transition:this.transition,motionFramePending:this.motionFramePending,helpers:this.sectionHelpers.visible,environmentTime:this.environmentTime,enabled:this.controls.enabled,particleRotation:this.particles?.rotation.y};
+    this.recording=true;this.loop.setPaused(true);this.controls.enabled=false;
+    try{
+      this.clearOrbitInertia();this.manual=false;this.settling=false;this.presentation=true;this.sectionHelpers.visible=false;
+      this.config={...saved.config,motion:{...saved.config.motion,playing:saved.config.motion.preset!=='still',cursor:0},render:{...saved.config.render,fps,adaptive:false}};
+      this.size={width,height};this.renderer.setPixelRatio(1);this.renderer.setSize(width,height,false);this.composer.setPixelRatio(1);this.composer.setSize(width,height);
+      this.product.rotation.set(0,0,0);this.product.position.set(0,0,0);
+      this.frameCamera(this.config.camera);this.camera.position.copy(this.desiredPosition);this.controls.target.copy(this.desiredTarget);this.camera.lookAt(this.controls.target);
+      this.motionPosition=this.camera.position.clone();this.motionTarget=this.controls.target.clone();this.motionTime=0;this.motionBaseAngle=0;this.product.rotation.set(0,0,0);this.product.position.set(0,0,0);
+      this.transition=false;this.motionFramePending=false;this.environmentTime=0;this.setSelected('',false);this.contactShadow?.invalidate();
+      const base=performance.now();
+      return await recordCanvas(this.canvas,elapsed=>{
+        if(this.disposed||this.contextUnavailable)throw new Error('Il contesto 3D è stato interrotto.');
+        // Evaluate each requested frame from its timeline position, even if a frame is dropped.
+        this.motionTime=Math.max(0,elapsed)*this.config.motion.speed;this.scrubPending=true;
+        if(this.config.animation?.playing)this.animations?.sample((saved.animationTime||0)+Math.max(0,elapsed)*this.config.animation.speed);
+        const playing=this.config.motion.playing;this.config.motion.playing=false;this.environmentTime=elapsed;if(this.particles)this.particles.rotation.y=elapsed*.007;
+        this.lastFrame=base+elapsed*1000;this.dirty=true;
+        try{this.tick(base+elapsed*1000);}finally{this.config.motion.playing=playing;}
+      },options);
+    }finally{
+      this.config=saved.config;this.presentation=saved.presentation;this.size=saved.size;
+      this.product.position.copy(saved.position);this.product.quaternion.copy(saved.quaternion);this.camera.copy(saved.camera);this.controls.target.copy(saved.target);
+      this.desiredPosition.copy(saved.desiredPosition);this.desiredTarget.copy(saved.desiredTarget);this.motionPosition=saved.motionPosition;this.motionTarget=saved.motionTarget;this.motionTime=saved.motionTime;this.motionBaseAngle=saved.motionBaseAngle;
+      this.transition=saved.transition;this.motionFramePending=saved.motionFramePending;this.environmentTime=saved.environmentTime;this.sectionHelpers.visible=saved.helpers;this.controls.enabled=saved.enabled;this.scrubPending=false;if(this.particles)this.particles.rotation.y=saved.particleRotation;
+      this.animations?.seek(saved.animationTime||0);
+      this.recording=false;
+      if(!this.disposed){
+        this.renderer.setPixelRatio(saved.dpr);this.renderer.setSize(saved.size.width,saved.size.height,false);this.composer.setPixelRatio(saved.dpr);this.composer.setSize(saved.size.width,saved.size.height);
+        this.setSelected(this.config.selectedMaterial,this.activeTab==='product'&&!this.presentation);this.contactShadow?.invalidate();this.monitor.reset();this.lastFrame=performance.now();this.loop.setPaused(document.hidden||!!this.contextUnavailable);this.invalidate();
+      }
+    }
   }
 
   async capture() {
@@ -672,7 +784,7 @@ export class StudioEngine {
     this.canvas.removeEventListener('pointermove', this.pointerMove); this.canvas.removeEventListener('pointerleave', this.pointerLeave);
     document.removeEventListener('visibilitychange', this.visibilityChanged);
     this.releaseInspection();
-    this.contactShadow?.dispose();
+    this.animations?.dispose();this.contactShadow?.dispose();
     this.resizeObserver.disconnect(); this.controls?.dispose(); this.draco?.dispose();
     this.canvas.removeEventListener('pointerdown', this.pointerDown); this.canvas.removeEventListener('pointerup', this.pointerUp); this.canvas.removeEventListener('dblclick', this.doubleClick); this.canvas.removeEventListener('webglcontextlost', this.contextLost);
     this.disposeObject(this.scene); this.reflector?.dispose(); this.composer?.dispose(); this.bokeh?.dispose(); this.bloom?.dispose(); this.grade?.dispose(); this.outputPass?.dispose(); this.environmentTarget?.dispose(); this.key.shadow.dispose(); this.renderer?.dispose();

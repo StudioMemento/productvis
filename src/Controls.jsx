@@ -1,10 +1,15 @@
-import { useRef, useState } from 'react';
+import { Children, Fragment, useEffect, useRef, useState } from 'react';
 import { PresetSymbol } from './PresetSymbol.jsx';
 import { PRESETS, TAB_LABELS } from './state.js';
 import { snapValue, dragValue } from './controlMath.js';
 
 export function Tool({ label, children, className = '', ...props }) {
   return <button type="button" className={`icon-button ${className}`} aria-label={label} title={label} {...props}>{children}</button>;
+}
+
+const controlCount = children => Children.toArray(children).reduce((count,child)=>count+(child.type===Fragment?controlCount(child.props.children):1),0);
+export function KnobGrid({ children, className = '', label }) {
+  return <div className={`knob-grid ${className}`} data-count={controlCount(children)} role={label?'group':undefined} aria-label={label}>{children}</div>;
 }
 
 export function Knob({ label, ariaLabel = label, value, min = 0, max = 1, step = .01, onChange, format = v => `${Math.round(v * 100)}%`, disabled = false, onStart }) {
@@ -42,7 +47,10 @@ export function Choices({ label, value, options, onChange, className = '' }) {
 }
 
 export function Presets({ category, selected, onChoose, disabled }) {
-  return <div className={`presets presets-${category}`} role="group" aria-label={`Preset ${TAB_LABELS[category]}`}>{PRESETS[category].map(p => <button type="button" key={p.id} className={`preset ${p.id === selected ? 'active' : ''}`} disabled={disabled} aria-pressed={p.id === selected} aria-label={`${TAB_LABELS[category]}: ${p.name}`} onClick={() => onChoose(p.id)}><span className={`preset-diamond finish-${category === 'product' ? p.id : 'none'}`} aria-hidden="true">{category !== 'product' && <PresetSymbol category={category} id={p.id} />}</span><span>{p.name}</span></button>)}</div>;
+  const list=PRESETS[category],count=Math.ceil(list.length/6);
+  const [page,setPage]=useState(()=>Math.floor(Math.max(0,list.findIndex(p=>p.id===selected))/6));
+  useEffect(()=>setPage(Math.floor(Math.max(0,list.findIndex(p=>p.id===selected))/6)),[selected,category]);
+  return <div className="preset-collection"><div className={`presets presets-${category}`} role="group" aria-label={`Preset ${TAB_LABELS[category]}`}>{list.slice(page*6,page*6+6).map(p => <button type="button" key={p.id} className={`preset ${p.id === selected ? 'active' : ''}`} disabled={disabled} aria-pressed={p.id === selected} aria-label={`${TAB_LABELS[category]}: ${p.name}`} onClick={() => onChoose(p.id)}><span className={`preset-diamond finish-${category === 'product' ? p.id : 'none'}`} aria-hidden="true">{category !== 'product' && <PresetSymbol category={category} id={p.id} />}</span><span>{p.name}</span></button>)}</div>{count>1&&<div className="preset-pages"><button type="button" aria-label="Preset precedenti" disabled={page===0} onClick={()=>setPage(p=>p-1)}>‹</button>{Array.from({length:count},(_,i)=><button key={i} type="button" aria-label={`Gruppo preset ${i+1}`} aria-pressed={page===i} className={page===i?'active':''} onClick={()=>setPage(i)}><i/></button>)}<button type="button" aria-label="Altri preset" disabled={page===count-1} onClick={()=>setPage(p=>p+1)}>›</button></div>}</div>;
 }
 
 export function Category({ id, title, icon: Icon, action, children }) {

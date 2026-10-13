@@ -1,14 +1,14 @@
-import { IconSparkles, IconBlur, IconSlice, IconFlipHorizontal, IconGridDots, IconActivity, IconAdjustments, IconCircleHalf2, IconLock, IconLockOpen } from '@tabler/icons-react';
-import { Knob, Choices, Toggle, Tool } from './Controls.jsx';
-import { POST_LOOKS, BLOOM_LIMIT, BLOOM_OVERRIDE_LIMIT, bloomStrength } from './lookdev.js';
+import { IconSparkles, IconBlur, IconSlice, IconFlipHorizontal, IconGridDots, IconActivity, IconAdjustments, IconCircleHalf2, IconPolygon, IconLayersIntersect, IconColorSwatch } from '@tabler/icons-react';
+import { Knob, KnobGrid, Choices, Toggle, Tool } from './Controls.jsx';
+import { POST_LOOKS, BLOOM_LIMIT } from './lookdev.js';
 
 export function InspectorControls({ state, change, disabled, onStart }) {
   const { inspection, section } = state;
   const field = (group,key,value) => change(s => ({ ...s, [group]: { ...s[group], [key]:value } }), `${group}.${key}`);
   const axisField = (axis,key,value) => change(s => ({ ...s, section:{ ...s.section, [axis]:{ ...s.section[axis], [key]:value } } }), `section.${axis}.${key}`);
   return <div className="look-controls">
-    <Choices label="Vista" value={inspection.view} options={[['pbr','PBR'],['wire','Wire'],['overlay','Mix'],['normals','Normali']].map(([value,label])=>({value,label,disabled}))} onChange={value=>field('inspection','view',value)}/>
-    {inspection.view === 'overlay' && <div className="knob-grid"><Knob label="Wire alpha" value={inspection.wireOpacity} min={.05} max={1} step={.01} onStart={onStart} onChange={v=>field('inspection','wireOpacity',v)}/></div>}
+    <div className="inspection-modes" role="group" aria-label="Visualizzazione mesh">{[[IconPolygon,'wire','Wire'],[IconLayersIntersect,'overlay','Mix'],[IconColorSwatch,'normals','Normali']].map(([Icon,view,label])=><Toggle key={view} label={label} icon={Icon} checked={inspection.view===view} disabled={disabled} onChange={checked=>field('inspection','view',checked?view:'pbr')}/>)}</div>
+    {inspection.view === 'overlay' && <KnobGrid><Knob label="Wire alpha" value={inspection.wireOpacity} min={.05} max={1} step={.01} onStart={onStart} onChange={v=>field('inspection','wireOpacity',v)}/></KnobGrid>}
     <div className="look-heading"><Toggle label="Sezioni XYZ" icon={IconSlice} checked={section.enabled} onChange={v=>field('section','enabled',v)} disabled={disabled}/></div>
     {section.enabled && <>
       <Choices label="Taglio" value={section.mode} options={[{value:'cut',label:'Piano'},{value:'slab',label:'Fascia'}]} onChange={v=>field('section','mode',v)}/>
@@ -17,7 +17,7 @@ export function InspectorControls({ state, change, disabled, onStart }) {
         <Knob label={`Posizione ${axis.toUpperCase()}`} value={section[axis].position} onChange={v=>axisField(axis,'position',v)} onStart={onStart} disabled={!section[axis].enabled}/>
         {section.mode==='cut' && <Tool label={`Inverti taglio ${axis.toUpperCase()}`} aria-pressed={section[axis].flip} className={section[axis].flip?'selected':''} disabled={!section[axis].enabled} onClick={()=>axisField(axis,'flip',!section[axis].flip)}><IconFlipHorizontal size={17}/></Tool>}
       </div>)}</div>
-      {section.mode==='slab' && <div className="knob-grid"><Knob label="Spessore" value={section.thickness} min={.02} max={1} step={.01} onStart={onStart} onChange={v=>field('section','thickness',v)}/></div>}
+      {section.mode==='slab' && <KnobGrid><Knob label="Spessore" value={section.thickness} min={.02} max={1} step={.01} onStart={onStart} onChange={v=>field('section','thickness',v)}/></KnobGrid>}
       <Toggle label="Guide" icon={IconGridDots} checked={section.helpers} onChange={v=>field('section','helpers',v)}/>
       <span className="pass-note">Tagli aperti · nessun riempimento</span>
     </>}
@@ -33,11 +33,11 @@ export function PostControls({ state, change, disabled, onStart }) {
     <div className="presets post-presets" role="group" aria-label="Look postprocessing">{POST_LOOKS.map(look=>{const active=Object.entries(look.values).every(([key,value])=>post[key]===value);return <button type="button" className={`preset ${active?'active':''}`} aria-pressed={active} key={look.id} disabled={disabled} onClick={()=>change(s=>({...s,post:{...look.values}}))}><span className="preset-diamond"><IconSparkles size={18}/></span><span>{look.name}</span></button>;})}</div>
     <Toggle label="Postprocessing" icon={IconAdjustments} checked={post.enabled} onChange={v=>field('enabled',v)} disabled={disabled}/>
     <Choices label="Tone" value={post.tone} options={[['aces','ACES'],['agx','AgX'],['neutral','Neutral']].map(([value,label])=>({value,label,disabled}))} onChange={v=>field('tone',v)}/>
-    <div className="look-heading bloom-heading"><Toggle label="Bloom" icon={IconSparkles} checked={post.bloom} onChange={v=>field('bloom',v)} disabled={disabled||!post.enabled}/><button type="button" className={`bloom-limit ${post.bloomOverride?'selected':''}`} disabled={disabled||!post.enabled||!post.bloom} aria-pressed={post.bloomOverride} aria-label={post.bloomOverride?'Ripristina limite bloom 0.2':'Override manuale bloom fino a 1'} title={post.bloomOverride?'Ripristina massimo 0.2':'Sblocca manualmente fino a 1'} onClick={()=>change(s=>{const post={...s.post,bloomOverride:!s.post.bloomOverride};return {...s,post:{...post,strength:bloomStrength(post)}};})}>{post.bloomOverride?<IconLockOpen size={12}/>:<IconLock size={12}/>}Max {post.bloomOverride?'1':'0.2'}</button></div>
-    {post.bloom && <div className="knob-grid">{knob('strength','Intensità',{max:post.bloomOverride?BLOOM_OVERRIDE_LIMIT:BLOOM_LIMIT,step:.01,format:v=>v.toFixed(2)})}{knob('radius','Raggio')}{knob('threshold','Soglia',{max:3,step:.05,format:v=>v.toFixed(2)})}</div>}
+    <div className="look-heading"><Toggle label="Bloom" icon={IconSparkles} checked={post.bloom} onChange={v=>field('bloom',v)} disabled={disabled||!post.enabled}/></div>
+    {post.bloom && <KnobGrid>{knob('strength','Intensità',{max:BLOOM_LIMIT,step:.005,format:v=>Number(v.toFixed(3)).toString()})}{knob('radius','Raggio')}{knob('threshold','Soglia',{max:3,step:.05,format:v=>v.toFixed(2)})}</KnobGrid>}
     <Toggle label="Profondità di campo" icon={IconBlur} checked={post.dof} onChange={v=>field('dof',v)} disabled={disabled||!post.enabled}/>
     <span className="control-group-title">Immagine</span>
-    <div className="knob-grid">{knob('contrast','Contrasto',{min:.5,max:1.5,step:.01})}{knob('saturation','Saturazione',{max:2})}{knob('vignette','Vignetta')}</div>
+    <KnobGrid>{knob('contrast','Contrasto',{min:.5,max:1.5,step:.01})}{knob('saturation','Saturazione',{max:2})}{knob('vignette','Vignetta')}</KnobGrid>
     {note && <span className="pass-note">{note}</span>}
   </div>;
 }

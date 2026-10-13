@@ -58,7 +58,7 @@ test('framing includes the placed model and scales the camera distance with its 
   applyModelTransform(f.placement,{...DEFAULT_TRANSFORM,x:2,y:1,z:-3,scale:2});engine.frameCamera(state.camera);
   const center=worldBounds(f.model).getCenter(v());
   close(engine.desiredTarget.x,center.x);close(engine.desiredTarget.z,center.z);close(engine.desiredTarget.y,center.y+.015);
-  close(engine.desiredPosition.distanceTo(engine.desiredTarget),distance*2);f.dispose();
+  assert.ok(Math.abs(engine.desiredPosition.distanceTo(engine.desiredTarget)-distance*2)<.01,'scale doubles framing distance apart from the small fixed target margin');f.dispose();
 });
 
 test('a translated product cannot leave a contact shadow beyond the cube support',()=>{
@@ -69,9 +69,9 @@ test('a translated product cannot leave a contact shadow beyond the cube support
   shadow.dispose();f.dispose();
 });
 
-test('all dedicated tabs including the final gear are reachable by scroll and scrubbing',()=>{
-  assert.equal(TABS.length,9);assert.equal(TABS.at(-1),'project');
-  for(const tab of ['post','inspect','render'])assert.ok(TABS.includes(tab));
+test('all five creative tabs are reachable by scroll and scrubbing; utilities stay out of the main rail',()=>{
+  assert.equal(TABS.length,5);assert.equal(TABS.at(-1),'motion');
+  for(const tab of ['post','inspect','render','project'])assert.ok(!TABS.includes(tab));
   for(let i=0;i<TABS.length;i++)assert.equal(pageIndex(i*390,390,TABS.length),i);
-  assert.equal(scrubIndex(0,-900,TABS.length),8);assert.equal(boundedIndex(9,TABS.length),8);
+  assert.equal(scrubIndex(0,-900,TABS.length),4);assert.equal(boundedIndex(9,TABS.length),4);
 });

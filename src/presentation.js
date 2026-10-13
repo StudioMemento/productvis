@@ -1,10 +1,12 @@
-import { CAMERA_ANGLES, FINISHES, LIGHT_RIGS, clamp, clone } from './state.js';
+import { CAMERA_ANGLES, FINISHES, LIGHT_RIGS, SCENE_THEMES, clamp, clone } from './state.js';
 import { materialFamily } from './navigation.js';
 import { POST_LOOKS, BLOOM_LIMIT } from './lookdev.js';
+import { CONCEPT_STAGES, STAGE_BY_ID } from './stageCatalog.js';
 
 // Pair environments with lighting, a full-product view and a restrained palette.
 // Variations use the existing renderer once; no preview images are generated.
 const LOOKS = [
+  ...CONCEPT_STAGES.flatMap(stage=>[stage.camera,stage.camera==='hero'?'low':'hero'].map(camera=>({scene:stage.id,lighting:stage.lighting,camera,colors:['#e9e4d7','#424752',stage.theme.ringColor],finishes:['satin','metal','gloss']}))),
   { scene: 'cubes', lighting: 'rim', camera: 'hero', colors: ['#34516b', '#bc8b33', '#424752'], finishes: ['satin', 'metal'] },
   { scene: 'cubes', lighting: 'top', camera: 'low', colors: ['#e9e4d7', '#68796d', '#424752'], finishes: ['matte', 'ceramic'] },
   { scene: 'ring', lighting: 'bicolor', camera: 'low', colors: ['#34516b', '#aab4c2', '#424752'], finishes: ['metal', 'gloss'] },
@@ -19,6 +21,14 @@ const LOOKS = [
   { scene: 'particles', lighting: 'bicolor', camera: 'top', colors: ['#34516b', '#e9e4d7', '#922633'], finishes: ['gloss', 'satin'] },
   { scene: 'studio', lighting: 'split', camera: 'macro', colors: ['#424752', '#e9e4d7'], finishes: ['satin', 'gloss'] },
   { scene: 'cinema', lighting: 'softbox', camera: 'macro', colors: ['#bc8b33', '#34516b'], finishes: ['metal', 'ceramic'] },
+  {scene:'desert',lighting:'sunset',camera:'wide',colors:['#e9e4d7','#bc8b33'],finishes:['matte','satin']},
+  {scene:'mountain',lighting:'overcast',camera:'rear',colors:['#637c70','#aab4c2'],finishes:['matte','metal']},
+  {scene:'urban',lighting:'noir',camera:'rearLow',colors:['#111317','#bc303a'],finishes:['gloss','metal']},
+  {scene:'tunnel',lighting:'neon',camera:'front',colors:['#aab4c2','#375fba'],finishes:['metal','gloss']},
+  {scene:'road',lighting:'rim',camera:'low',colors:['#bc8b33','#e9e4d7'],finishes:['satin','gloss']},
+  {scene:'rain',lighting:'moon',camera:'rearLow',colors:['#111317','#aab4c2'],finishes:['gloss','metal']},
+  {scene:'grid',lighting:'bicolor',camera:'overhead',colors:['#60b6c2','#424752'],finishes:['metal','satin']},
+  {scene:'monolith',lighting:'showroom',camera:'left',colors:['#bd879c','#e9e4d7'],finishes:['matte','ceramic']},
 ];
 
 const mix = (a, b, amount) => Number((a + (b - a) * amount).toFixed(6));
@@ -34,7 +44,8 @@ export function randomizePresentation(state, materials = [], { delta = state.ran
   const look = pick(looks);
   const next = clone(state), blend = .4 + amount * .6;
   next.scene = {
-    ...state.scene, preset: look.scene, composition: pick([0,1,2]), seed: Math.floor(random()*100000),
+    ...state.scene,...SCENE_THEMES[look.scene], preset: look.scene, composition: pick([0,1,2]), seed: Math.floor(random()*100000),
+    density:pick([.25,.45,.7]),height:mix(1,pick([.5,.8,1.2,1.6]),amount),spread:mix(1,pick([.8,1.2,1.5]),amount),weather:pick([.2,.4,.65]),glitch:mix(.1,.45,amount),speed:mix(.35,.9,amount),
     scale: mix(1,pick([.65,.8,1.1,1.35]),amount),
     fog: mix(state.scene.fog,pick([.05,.12,.2,.35]),blend),
     particles: mix(state.scene.particles,pick([.05,.15,.3,.5]),blend),
@@ -42,21 +53,30 @@ export function randomizePresentation(state, materials = [], { delta = state.ran
     reflection: mix(state.scene.reflection,pick([.08,.2,.35]),blend),
     ringColor: look.lighting==='bicolor'?pick(['#799fff','#e6eeff']):pick(['#ffb020','#ff887c','#e6eeff']),
   };
+  // Keep each concept's identity. Delta varies proportions without turning pearl
+  // into a dark room or erasing the rain/neon palette that defines the set.
+  const concept=STAGE_BY_ID[look.scene];
+  if(concept){
+    for(const key of ['background','groundColor','ringColor','floorRoughness','reflection'])next.scene[key]=concept.theme[key];
+    next.scene.fog=clamp(concept.theme.fog+mix(-.025,.06,random())*amount,0,1);
+    next.scene.weather=clamp(concept.theme.weather+mix(-.15,.15,random())*amount,0,1);
+  }
+  if(reducedMotion)next.scene.speed=0;
   next.lighting = { ...state.lighting, preset: look.lighting, ...LIGHT_RIGS[look.lighting],
     intensity: mix(1,pick([.75,.9,1.1,1.3]),amount), rotation: mix(0,pick([-60,-30,20,50]),amount) };
   const angle=CAMERA_ANGLES[look.camera];
   next.camera = { ...state.camera, preset:look.camera, ...angle,
     azimuth:clamp(angle.azimuth+mix(0,pick([-12,-5,5,12]),amount),-180,180),
-    aperture:mix(5.6,pick([2.8,4,8,11]),amount), exposure:mix(-.1,pick([-.35,-.2,0,.15]),amount), autoFocus:true, focusPoint:null };
+    aperture:mix(5.6,pick([2.8,4,8,11]),amount), exposure:mix(-.1,pick([-.35,-.2,0,.15]),amount), autoFocus:true, focusPoint:null,targetPoint:null,orbitRadius:null };
   if (next.camera.azimuth===state.camera.azimuth) next.camera.azimuth=clamp(next.camera.azimuth+(next.camera.azimuth>175?-1:1)*Math.max(.1,amount*3),-180,180);
   const mood=pick(POST_LOOKS.filter(look=>Object.entries(look.values).some(([key,value])=>state.post[key]!==value))).values;
   next.post={...mood};
   for(const key of ['strength','radius','threshold','vignette','contrast','saturation']) next.post[key]=mix(state.post[key],mood[key],blend);
   next.post.strength=Math.min(BLOOM_LIMIT,next.post.strength); next.post.bloomOverride=false;
   // Macro shots stay close to the selected detail; wider views can rotate the product.
-  const motions=look.camera==='macro'?['idle','dolly']:['idle','turntable','orbit','dolly'];
+  const motions=['macro','detail'].includes(look.camera)?['idle','dolly']:['idle','turntable','orbit','dolly'];
   const motion=pick(motions.filter(preset=>preset!==state.motion.preset));
-  next.motion={...state.motion,preset:motion,playing:!reducedMotion,loop:true,axis:'y',direction:pick([-1,1]),
+  next.motion={...state.motion,preset:motion,playing:!reducedMotion,loop:true,axis:'y',direction:pick([-1,1]),duration:pick([8,12,16]),easing:'smooth',cursor:0,
     speed:mix(.3,motion==='idle'?.65:.9,amount),
     amplitude:motion==='idle'?mix(2,10,amount):motion==='turntable'?mix(30,120,amount):mix(15,55,amount),
     travel:mix(.05,look.camera==='macro'?.12:.24,amount)};

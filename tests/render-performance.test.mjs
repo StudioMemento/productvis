@@ -82,7 +82,7 @@ test('engine sleeps with invisible particles, but keeps visible particle motion 
     assert.equal(engine.tick(32), true); assert.ok(engine.particles.rotation.y > 0);
     engine.particles.visible = false; assert.equal(engine.tick(48), false);
     engine.particles.visible = true; engine.stage.visible = false; assert.equal(engine.tick(64), false);
-    engine.controls.update = () => true; assert.equal(engine.tick(80), true);
+    engine.controls.update = () => true; engine.manual = true; assert.equal(engine.tick(80), true);
     globalThis.document.hidden = true; const before = renders;
     assert.equal(engine.tick(96), false); assert.equal(renders, before);
   } finally { if (previousDocument === undefined) delete globalThis.document; else globalThis.document = previousDocument; }
