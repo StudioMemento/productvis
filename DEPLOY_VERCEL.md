@@ -33,7 +33,7 @@ npx vercel --prod
 | Node.js | 22 o successivo |
 | Variabili d’ambiente | Nessuna |
 
-Anche `npm run build` esegue la build portabile. Il pacchetto contiene sorgenti, lockfile, modello demo, asset locali, licenze, test e la build statica in `dist/client`.
+Anche `npm run build` esegue la build portabile. Il pacchetto contiene sorgenti, lockfile, modello demo, asset locali, licenze e test. Vercel genera `dist/client` durante il deploy; questa distribuzione non duplica il modello in una build precompilata.
 
 ## Verifica locale
 

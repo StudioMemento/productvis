@@ -15,7 +15,7 @@ npm run dev -- --host 0.0.0.0
 
 Aprire l'indirizzo indicato da Vite in un browser con WebGL 2 disponibile. I file del prodotto vengono elaborati localmente dal browser; il prototipo non richiede account o backend.
 
-La cartella `dist/client` contiene anche la build statica. Va servita via HTTP: l'apertura diretta di `index.html` come file locale non carica correttamente moduli e modello.
+Dopo la compilazione, la cartella `dist/client` contiene la build statica. Va servita via HTTP: l'apertura diretta di `index.html` come file locale non carica correttamente moduli e modello.
 
 ```sh
 npm run build:vercel
@@ -136,7 +136,7 @@ Le dimensioni e la logica di cattura/ripristino sono testate; codec effettivo, q
 - `public/assets`: immagini statiche di riserva, non render dal motore.
 - `tests`: test dello stato, roundtrip, movimento e packaging.
 
-Il progetto di sviluppo è gestito in **Sites**, con anteprima privata e sorgenti versionati. Lo ZIP per Vercel contiene una copia portabile senza identificativi di hosting privati. `vercel.json` usa `npm run build:vercel` e pubblica `dist/client`; non servono variabili d’ambiente. La copia statica già compilata è inclusa. La preparazione dello ZIP non effettua il deploy su Vercel.
+Il progetto di sviluppo è gestito in **Sites**, con anteprima privata e sorgenti versionati. Lo ZIP per Vercel contiene una copia portabile senza identificativi di hosting privati. `vercel.json` usa `npm run build:vercel` e pubblica `dist/client`; non servono variabili d’ambiente. La copia statica viene generata durante la build; lo ZIP leggero include sorgenti e asset senza duplicarla. La preparazione dello ZIP non effettua il deploy su Vercel.
 
 ## Crediti
 

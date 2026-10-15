@@ -1,9 +1,9 @@
-ProductVis — Vercel export
-15 ottobre 2026
+ProductVis — Vercel source package
+15 ottobre 2026 — archivio ripristinato
 Source commit: d1b4444b43a2aecde0ef5d4829ca3ae7d6ef9bff
 
-Contiene l’ultima UI approvata: reset per asse, lock sotto al nome, delta ad anello, pannello ridimensionabile, menu avanzato isolato e blur non lineare.
+UI approvata: reset per asse, lock sotto al nome, delta ad anello, pannello ridimensionabile, menu avanzato isolato, blur non lineare.
 
-Verifiche: build Vercel dalla cartella esportata, 120 test portabili superati, integrità ZIP e asset verificati.
-Sorgenti app e build statica corrispondono all’anteprima privata approvata.
-Collaudo GPU/touch e deploy Vercel non eseguiti.
+Pacchetto leggero: sorgenti e asset completi. La build viene generata da Vercel in dist/client.
+120 test portabili superati nella verifica precedente; sorgenti applicativi invariati.
+Build portabile e integrità dell’archivio ricontrollate per questo pacchetto.
