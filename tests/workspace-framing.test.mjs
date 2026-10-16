@@ -8,11 +8,7 @@ const v=(x,y,z)=>new THREE.Vector3(x,y,z);
 test('default console size stays stable across content changes and explicit expansion remains bounded',()=>{
   for(const [width,height,bottomDock] of [[1440,900,false],[1920,1080,false],[844,390,false],[568,320,false],[390,844,true],[320,568,true],[1079,1834,true],[1150,1000,true],[1151,1000,false]]){
     const insets=workspaceInsets(width,height);
-<<<<<<< HEAD
     const expected=bottomDock?{right:0,bottom:Math.min(height*.65,Math.max(340,height*.38))}:{right:width/3,bottom:0};
-=======
-    const expected=bottomDock?{right:0,bottom:Math.min(height*.65,Math.max(400,height/3))}:{right:width/3,bottom:0};
->>>>>>> 10e60a6124e91f2ebd4d0716d2ef74e1804cf295
     assert.ok(Math.abs(insets.right-expected.right)<1e-9&&Math.abs(insets.bottom-expected.bottom)<1e-9);
     assert.deepEqual(workspaceInsets(width,height,{expanded:true}),bottomDock?{right:0,bottom:height*.65}:insets);
     assert.ok(height-insets.bottom>=height*.35);
