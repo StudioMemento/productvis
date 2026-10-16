@@ -9,7 +9,7 @@ import {StudioEngine} from '../src/engine.js';
 import {videoSettings,videoType,recordCanvas} from '../src/playblast.js';
 
 test('expanded environments, lighting, focus and motion controls survive project roundtrips',()=>{
-  assert.equal(PRESETS.scene.length,34);assert.equal(PRESETS.lighting.length,12);assert.equal(PRESETS.camera.length,12);
+  assert.equal(PRESETS.scene.length,6);assert.equal(PRESETS.lighting.length,12);assert.equal(PRESETS.camera.length,12);
   for(const group of ['scene','lighting','camera'])for(const preset of PRESETS[group]){
     const state=applyPreset(clone(DEFAULT_STATE),group,preset.id);
     state.scene.density=.85;state.scene.height=1.8;state.scene.weather=.7;state.scene.glitch=.6;

@@ -5,5 +5,7 @@ import "./styles.css";
 import "./lookdev.css";
 import "./mesh-workspace.css";
 import "./dropdown-workspace.css";
+import "./axis-workspace.css";
+import "./editorial-workspace.css";
 
 createRoot(document.getElementById("root")).render(<App />);

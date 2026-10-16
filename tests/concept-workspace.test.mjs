@@ -1,17 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { CONCEPT_STAGES } from '../src/stageCatalog.js';
+import { CONCEPT_STAGES, STAGES, RETIRED_STAGES } from '../src/stageCatalog.js';
 import { createConceptStage } from '../src/conceptStages.js';
 import { DEFAULT_STATE, clone, applyPreset, makeProject, validateProject } from '../src/state.js';
 import { randomizePresentation } from '../src/presentation.js';
 import { ModelAnimation } from '../src/modelAnimation.js';
-import { INITIAL_MENU, workspaceMenu } from '../src/workspaceMenu.js';
+import { INITIAL_MENU, workspaceMenu, restoreWorkspaceMenu, persistWorkspaceMenu } from '../src/workspaceMenu.js';
 
-test('twenty complete concepts preserve old presets, camera and authored materials',()=>{
-  assert.equal(new Set(CONCEPT_STAGES.map(s=>s.id)).size,20);
-  for(const family of ['clean','elaborate'])assert.equal(CONCEPT_STAGES.filter(s=>s.family===family).length,10);
-  for(const stage of CONCEPT_STAGES){
+test('six curated stages preserve camera and authored materials',()=>{
+  assert.deepEqual(STAGES.map(s=>s.id),['void','cubes','studio','rain','ring','velocity-lines']);
+  for(const stage of STAGES){
     const state=applyPreset(clone(DEFAULT_STATE),'scene',stage.id);
     assert.equal(state.scene.preset,stage.id);assert.deepEqual(state.lighting,DEFAULT_STATE.lighting);
     assert.deepEqual(state.camera,DEFAULT_STATE.camera);assert.deepEqual(state.materials,DEFAULT_STATE.materials);
@@ -50,11 +49,11 @@ test('solid stage modules keep the central product volume clear at all supported
   }
 });
 
-test('Sparkle includes all twenty concepts, preserves native animation, and pauses effects for reduced motion',()=>{
+test('Sparkle includes all six curated stages, preserves native animation, and pauses effects for reduced motion',()=>{
   let seed=37;const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)|0;return(seed>>>0)/4294967296;};
   let state=clone(DEFAULT_STATE);state.animation={clip:2,playing:true,cursor:.4,loop:false,speed:.8};
   const seen=new Set();for(let i=0;i<700;i++){const before=state;state=randomizePresentation(state,[],{random,reducedMotion:true});seen.add(state.scene.preset);assert.notEqual(state.scene.preset,before.scene.preset);assert.deepEqual(state.animation,before.animation);assert.equal(state.scene.speed,0);assert.equal(state.motion.playing,false);}
-  for(const stage of CONCEPT_STAGES)assert.ok(seen.has(stage.id),`${stage.name} is reachable from Sparkle`);
+  for(const stage of STAGES)assert.ok(seen.has(stage.id),`${stage.name} is reachable from Sparkle`);
 });
 
 function player(){
@@ -93,14 +92,41 @@ test('old projects default native clips to paused and malformed clip controls ar
   const empty=new ModelAnimation(new THREE.Group());empty.setState({playing:true});assert.equal(empty.update(.5).moving,false);empty.dispose();
 });
 
-test('one disclosure owns the workspace; toggles, outside/Escape close and category changes never reopen a stale menu',()=>{
+test('one persistent selection owns the workspace; repeated clicks and dismissals cannot collapse it',()=>{
   let menu=INITIAL_MENU;
   menu=workspaceMenu(menu,{type:'toggle',id:'project'});assert.equal(menu.open,'project');assert.equal(menu.category,'product');
-  menu=workspaceMenu(menu,{type:'toggle',id:'project'});assert.equal(menu.open,null);
+  assert.equal(workspaceMenu(menu,{type:'toggle',id:'project'}),menu);
   menu=workspaceMenu(menu,{type:'open',id:'scene'});assert.deepEqual(menu,{category:'scene',open:'scene'});
-  menu=workspaceMenu(menu,{type:'toggle',id:'inspect'});assert.equal(menu.open,'inspect');
-  menu=workspaceMenu(menu,{type:'close'});assert.deepEqual(menu,{category:'scene',open:null});
+  menu=workspaceMenu(menu,{type:'toggle',id:'inspect'});assert.equal(menu.open,'model');
+  menu=workspaceMenu(menu,{type:'close'});assert.deepEqual(menu,{category:'scene',open:'model'});
   menu=workspaceMenu(menu,{type:'toggle',id:'scene'});assert.equal(menu.open,'scene');
-  menu=workspaceMenu(menu,{type:'toggle',id:'scene'});assert.equal(menu.open,null);
+  assert.equal(workspaceMenu(menu,{type:'toggle',id:'scene'}),menu);
   assert.equal(workspaceMenu(menu,{type:'open',id:'invalid'}),menu);
+  for(const id of ['product','scene','lighting','camera','motion','model','inspect','project','render','export','post']){
+    menu=workspaceMenu(menu,{type:'open',id});
+    assert.equal(menu.open,({post:'motion',inspect:'model',render:'project'}[id]||id));
+    for(const type of ['toggle','close','hide','escape','outside','unknown'])assert.equal(workspaceMenu(menu,{type,id}),menu);
+  }
+});
+
+test('the last workspace survives a reload and unavailable or malformed storage falls back safely',()=>{
+  let saved;const storage={getItem:()=>saved,setItem:(_key,value)=>{saved=value;}};
+  assert.deepEqual(restoreWorkspaceMenu(storage),INITIAL_MENU);
+  for(const menu of [{category:'motion',open:'motion'},{category:'camera',open:'render'},{category:'scene',open:'model'},{category:'motion',open:'export'},{category:'lighting',open:'post'}]){
+    persistWorkspaceMenu(menu,storage);assert.deepEqual(restoreWorkspaceMenu(storage),menu.open==='post'?{category:'motion',open:'motion'}:{...menu,open:({inspect:'model',render:'project'}[menu.open]||menu.open)});
+  }
+  for(const value of ['broken','null','{}','{"category":"scene","open":null}','{"category":"bad","open":"product"}']){
+    saved=value;assert.deepEqual(restoreWorkspaceMenu(storage),INITIAL_MENU);
+  }
+  saved='{"category":"scene","open":"camera"}';assert.deepEqual(restoreWorkspaceMenu(storage),{category:'camera',open:'camera'});
+  const blocked={getItem(){throw Error('unavailable');},setItem(){throw Error('unavailable');}};
+  assert.deepEqual(restoreWorkspaceMenu(blocked),INITIAL_MENU);assert.doesNotThrow(()=>persistWorkspaceMenu(INITIAL_MENU,blocked));
+});
+
+test('retired stages migrate to curated sets without changing the product, camera or authored effects',()=>{
+  for(const [retired,replacement] of Object.entries(RETIRED_STAGES)){
+    const original=clone(DEFAULT_STATE);original.scene.preset=retired;original.materials={'mat-0':{color:'#123456',finish:'matte',roughness:.9}};original.selectedMaterial='mat-0';
+    const restored=validateProject(makeProject(original,{type:'demo'})).state;
+    assert.equal(restored.scene.preset,replacement);assert.deepEqual(restored.camera,original.camera);assert.deepEqual(restored.materials,original.materials);assert.deepEqual(restored.effects,original.effects);
+  }
 });

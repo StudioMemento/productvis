@@ -1,9 +1,12 @@
-import { IconX } from '@tabler/icons-react';
-import { Tool } from './Controls.jsx';
+import { useLayoutEffect, useRef } from 'react';
 
-export function TechnicalPanel({id,title,onClose,children}) {
+export function TechnicalPanel({id,title,action,scrollPositions,children}) {
+  const viewport=useRef(null);
+  useLayoutEffect(()=>{viewport.current.scrollTop=scrollPositions?.[id]||0;},[id,scrollPositions]);
   return <section className="technical-panel category" id={`controls-${id}`} role="region" aria-label={title}>
-    <header className="technical-heading"><h2>{title}</h2><Tool label={`Chiudi ${title}`} onClick={onClose}><IconX size={19}/></Tool></header>
-    <div className="technical-content dropdown-scroll">{children}</div>
+    <div ref={viewport} className="technical-content dropdown-scroll" tabIndex={0} onScroll={event=>{if(scrollPositions)scrollPositions[id]=event.currentTarget.scrollTop;}}>
+      <header className="technical-heading"><h2>{title}</h2>{action}</header>
+      {children}
+    </div>
   </section>;
 }

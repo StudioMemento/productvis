@@ -1,19 +1,14 @@
 import { DEFAULT_POST, DEFAULT_RENDER, DEFAULT_INSPECTION, DEFAULT_SECTION, validateLookdev } from './lookdev.js';
 import { DEFAULT_TRANSFORM, validateTransform } from './modelTransform.js';
-import { CONCEPT_STAGES } from './stageCatalog.js';
+import { STAGES, RETIRED_STAGES } from './stageCatalog.js';
 import { DEFAULT_ANIMATION, validateAnimation } from './animationState.js';
+import { DEFAULT_EFFECTS, validateEffects } from './objectEffectsState.js';
+import { defaultAxes, validateAxes } from './axisState.js';
 export const TABS = ['product', 'scene', 'lighting', 'camera', 'motion'];
-export const CUSTOM_SCENES=['grid','desert','mountain','urban','tunnel','road','rain','monolith',...CONCEPT_STAGES.map(stage=>stage.id)];
+export const CUSTOM_SCENES=['rain','ring','velocity-lines'];
 export const TAB_LABELS = { product: 'MAT', scene: 'ENV', lighting: 'LIGHT', camera: 'CAM', motion: 'FX', post: 'Post', inspect: 'Ispeziona', render: 'Render', project: 'Modello' };
 export const PRESETS = {
-  scene: [
-    ...CONCEPT_STAGES.map(({id,name,family})=>({id,name,family})),
-    { id: 'ring', name: 'Ring' }, { id: 'void', name: 'Void' }, { id: 'studio', name: 'Studio' },
-    { id: 'cinema', name: 'Cinema' }, { id: 'cubes', name: 'Cubi' }, { id: 'particles', name: 'Particelle' },
-    { id: 'grid', name: 'Grid' }, { id: 'desert', name: 'Dune' }, { id: 'mountain', name: 'Alpine' },
-    { id: 'urban', name: 'Urban' }, { id: 'tunnel', name: 'Tunnel' }, { id: 'road', name: 'Glitch road' },
-    { id: 'rain', name: 'Rain' }, { id: 'monolith', name: 'Monoliti' },
-  ],
+  scene: STAGES.map(({id,name})=>({id,name})),
   lighting: [
     { id: 'softbox', name: 'Softbox' }, { id: 'rim', name: 'Rim' }, { id: 'split', name: 'Split' },
     { id: 'top', name: 'Top' }, { id: 'warm', name: 'Warm' }, { id: 'bicolor', name: 'Bicolor' },
@@ -57,15 +52,7 @@ export const LIGHT_RIGS = {
   noir: {key:5.8,fill:.15,rim:3.6,temperature:5800,tint:'neutral',softness:20,elevation:22,ambient:.06,environment:.2},
 };
 for (const [id,rig] of Object.entries(LIGHT_RIGS)) LIGHT_RIGS[id]={elevation:id==='top'?82:52,ambient:.4,environment:.65,keyColor:'',fillColor:'#c9d7ef',rimColor:'',...rig};
-export const SCENE_THEMES = {
-  ...Object.fromEntries(CONCEPT_STAGES.map(stage=>[stage.id,stage.theme])),
-  ring:{background:'#11151b',groundColor:'#1b1f25'},void:{background:'#07090c',groundColor:'#1b1f25'},studio:{background:'#303741',groundColor:'#45494f'},
-  cinema:{background:'#131820',groundColor:'#1b1f25'},cubes:{background:'#101722',groundColor:'#272e38'},particles:{background:'#0c111b',groundColor:'#1b1f25'},
-  grid:{background:'#080d15',groundColor:'#17212b',ringColor:'#75b5bf'},desert:{background:'#29231e',groundColor:'#6c5942',ringColor:'#f5bf74'},
-  mountain:{background:'#17202a',groundColor:'#35404b',ringColor:'#b9d6e1'},urban:{background:'#10151c',groundColor:'#222931',ringColor:'#ffc37d'},
-  tunnel:{background:'#0b1018',groundColor:'#18212a',ringColor:'#8fc5da'},road:{background:'#080c14',groundColor:'#182331',ringColor:'#ffbb4b'},
-  rain:{background:'#111922',groundColor:'#222a34',ringColor:'#8fb8df',reflection:.4,floorRoughness:.18},monolith:{background:'#1b1920',groundColor:'#35333b',ringColor:'#e0ad99'},
-};
+export const SCENE_THEMES = Object.fromEntries(STAGES.map(s=>[s.id,s.theme]));
 export const CAMERA_ANGLES = {
   hero: { azimuth: 38, elevation: 13, distance: 1, focal: 50 },
   low: { azimuth: 32, elevation: 5, distance: 1.07, focal: 35 },
@@ -93,7 +80,9 @@ export const DEFAULT_STATE = {
   camera: { preset: 'hero', ...CAMERA_ANGLES.hero, aperture: 5.6, exposure: -.15, autoFocus: true, focus: 6, focusPoint: null, targetPoint:null, orbitRadius:null, bokeh:.5, shotDelta:25 },
   motion: { preset: 'still', playing: false, speed: 1, direction: 1, loop: true, axis: 'y', amplitude: 360, travel: .3, duration:12, cursor:0, easing:'smooth' },
   animation: { ...DEFAULT_ANIMATION },
+  effects: { ...DEFAULT_EFFECTS },
   materials: {}, selectedMaterial: '', quality: 'auto', randomDelta: 35,
+  axes: defaultAxes(),
   transform: { ...DEFAULT_TRANSFORM },
   post: structuredClone(DEFAULT_POST), render: structuredClone(DEFAULT_RENDER), inspection: structuredClone(DEFAULT_INSPECTION), section: structuredClone(DEFAULT_SECTION),
 };
@@ -124,7 +113,8 @@ export function validateProject(input) {
   if (!input || input.format !== 'productvis' || input.version !== 1 || !input.state) throw new Error('Questo file non è un progetto ProductVis compatibile.');
   if (!input.model || !['demo', 'embedded'].includes(input.model.type)) throw new Error('Il progetto non contiene un modello valido.');
   if (input.model.type === 'embedded' && (typeof input.model.data !== 'string' || !/^data:model\/gltf-binary;base64,[A-Za-z0-9+/=]+$/.test(input.model.data))) throw new Error('Il modello incorporato non è valido.');
-  const s = input.state, result = clone(DEFAULT_STATE);
+  const s = clone(input.state), result = clone(DEFAULT_STATE);
+  if(RETIRED_STAGES[s.scene?.preset])s.scene={...s.scene,...SCENE_THEMES[RETIRED_STAGES[s.scene.preset]],preset:RETIRED_STAGES[s.scene.preset]};
   const ranges = {
     scene: { composition: [0, 2], scale: [.55, 1.5], seed: [0, 100000], fog: [0, 1], particles: [0, 1], floorRoughness: [0, 1], reflection: [0, .8],density:[0,1],height:[.3,2],spread:[.6,1.8],weather:[0,1],glitch:[0,1],speed:[0,2] },
     lighting: { intensity: [0, 2], rotation: [-180, 180], key: [0, 10], fill: [0, 10], rim: [0, 10], temperature: [2000, 9000], softness: [0, 100],elevation:[5,85],ambient:[0,1.5],environment:[0,2] },
@@ -157,6 +147,8 @@ export function validateProject(input) {
   validateLookdev(s, result);
   result.transform = validateTransform(s.transform);
   result.animation = validateAnimation(s.animation);
+  result.effects = validateEffects(s.effects);
+  result.axes = validateAxes(s.axes,{legacyRandomize:s.effects?.randomize});
   result.name = typeof s.name === 'string' ? s.name.slice(0, 80) : 'Studio 01';
   for (const [key, mat] of Object.entries(s.materials || {}).slice(0, 500)) {
     if (!/^mat-\d+$/.test(key) || !mat || typeof mat !== 'object') continue;

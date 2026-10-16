@@ -5,11 +5,17 @@ import { perspectiveFit } from '../src/cameraFraming.js';
 import { workspaceInsets } from '../src/workspaceLayout.js';
 const v=(x,y,z)=>new THREE.Vector3(x,y,z);
 
-test('workspace reserves only the right column or lower dock, never the old bottom navbar',()=>{
-  assert.deepEqual(workspaceInsets(1440,900,{left:1030,top:92}),{right:430,bottom:16});
-  assert.deepEqual(workspaceInsets(390,844,{left:18,top:545}),{right:0,bottom:311});
-  assert.deepEqual(workspaceInsets(1079,1834,{left:180,top:1422}),{right:0,bottom:424});
-  assert.ok(workspaceInsets(390,844,{left:18,top:545}).bottom<844*.4);
+test('default console size stays stable across content changes and explicit expansion remains bounded',()=>{
+  for(const [width,height,bottomDock] of [[1440,900,false],[1920,1080,false],[844,390,false],[568,320,false],[390,844,true],[320,568,true],[1079,1834,true],[1150,1000,true],[1151,1000,false]]){
+    const insets=workspaceInsets(width,height);
+    const expected=bottomDock?{right:0,bottom:Math.min(height*.65,Math.max(340,height*.38))}:{right:width/3,bottom:0};
+    assert.ok(Math.abs(insets.right-expected.right)<1e-9&&Math.abs(insets.bottom-expected.bottom)<1e-9);
+    assert.deepEqual(workspaceInsets(width,height,{expanded:true}),bottomDock?{right:0,bottom:height*.65}:insets);
+    assert.ok(height-insets.bottom>=height*.35);
+    // Content size and scroll never change framing.
+    assert.deepEqual(workspaceInsets(width,height,{left:0,top:0}),insets);
+    assert.deepEqual(workspaceInsets(width,height,{left:width,top:height}),insets);
+  }
 });
 
 test('front framing fills portrait space without treating car length as visible width',()=>{
@@ -21,8 +27,10 @@ test('front framing fills portrait space without treating car length as visible 
 
 test('projected corners fit the unobscured viewport across aspect ratios and cinematic angles',()=>{
   const bounds=new THREE.Box3(v(-1,.025,-2.35),v(1,1.325,2.35)),target=bounds.getCenter(v(0,0,0));
-  for(const [width,height,right,bottom] of [[390,844,0,311],[1079,1834,0,424],[1440,900,430,16],[844,390,346,16]]) {
-    for(const [azimuth,elevation] of [[0,8],[38,13],[90,8],[38,57]]) {
+  for(const [width,height] of [[320,568],[390,844],[1079,1834],[1440,900],[1920,1080],[844,390],[568,320]]) {
+
+    for(const preferences of [{},{expanded:true},{sideRatio:.6,bottomRatio:.65},{sideRatio:.15,bottomRatio:.3}])for(const [azimuth,elevation] of [[0,8],[38,13],[90,8],[38,57]]) {
+      const {right,bottom}=workspaceInsets(width,height,preferences);
       const a=THREE.MathUtils.degToRad(azimuth),e=THREE.MathUtils.degToRad(elevation),direction=v(Math.sin(a)*Math.cos(e),Math.sin(e),Math.cos(a)*Math.cos(e));
       const camera=new THREE.PerspectiveCamera(35,width/height,.05,200);
       const distance=perspectiveFit(bounds,target,direction,THREE.MathUtils.degToRad(camera.fov),camera.aspect,1-right/width,1-bottom/height);

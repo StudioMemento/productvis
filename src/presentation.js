@@ -1,35 +1,12 @@
 import { CAMERA_ANGLES, FINISHES, LIGHT_RIGS, SCENE_THEMES, clamp, clone } from './state.js';
 import { materialFamily } from './navigation.js';
 import { POST_LOOKS, BLOOM_LIMIT } from './lookdev.js';
-import { CONCEPT_STAGES, STAGE_BY_ID } from './stageCatalog.js';
+import { STAGES, STAGE_BY_ID } from './stageCatalog.js';
+import { sparkleEffects } from './objectEffectsState.js';
 
 // Pair environments with lighting, a full-product view and a restrained palette.
 // Variations use the existing renderer once; no preview images are generated.
-const LOOKS = [
-  ...CONCEPT_STAGES.flatMap(stage=>[stage.camera,stage.camera==='hero'?'low':'hero'].map(camera=>({scene:stage.id,lighting:stage.lighting,camera,colors:['#e9e4d7','#424752',stage.theme.ringColor],finishes:['satin','metal','gloss']}))),
-  { scene: 'cubes', lighting: 'rim', camera: 'hero', colors: ['#34516b', '#bc8b33', '#424752'], finishes: ['satin', 'metal'] },
-  { scene: 'cubes', lighting: 'top', camera: 'low', colors: ['#e9e4d7', '#68796d', '#424752'], finishes: ['matte', 'ceramic'] },
-  { scene: 'ring', lighting: 'bicolor', camera: 'low', colors: ['#34516b', '#aab4c2', '#424752'], finishes: ['metal', 'gloss'] },
-  { scene: 'ring', lighting: 'rim', camera: 'front', colors: ['#922633', '#bc8b33', '#e9e4d7'], finishes: ['gloss', 'satin'] },
-  { scene: 'void', lighting: 'split', camera: 'profile', colors: ['#922633', '#aab4c2', '#424752'], finishes: ['satin', 'metal'] },
-  { scene: 'void', lighting: 'softbox', camera: 'hero', colors: ['#e9e4d7', '#68796d', '#34516b'], finishes: ['ceramic', 'matte'] },
-  { scene: 'studio', lighting: 'softbox', camera: 'hero', colors: ['#e9e4d7', '#34516b', '#922633'], finishes: ['ceramic', 'gloss'] },
-  { scene: 'studio', lighting: 'top', camera: 'front', colors: ['#424752', '#68796d', '#aab4c2'], finishes: ['satin', 'matte'] },
-  { scene: 'cinema', lighting: 'warm', camera: 'hero', colors: ['#bc8b33', '#922633', '#424752'], finishes: ['satin', 'gloss'] },
-  { scene: 'cinema', lighting: 'bicolor', camera: 'low', colors: ['#34516b', '#aab4c2', '#424752'], finishes: ['metal', 'satin'] },
-  { scene: 'particles', lighting: 'rim', camera: 'profile', colors: ['#e9e4d7', '#aab4c2', '#bc8b33'], finishes: ['ceramic', 'metal'] },
-  { scene: 'particles', lighting: 'bicolor', camera: 'top', colors: ['#34516b', '#e9e4d7', '#922633'], finishes: ['gloss', 'satin'] },
-  { scene: 'studio', lighting: 'split', camera: 'macro', colors: ['#424752', '#e9e4d7'], finishes: ['satin', 'gloss'] },
-  { scene: 'cinema', lighting: 'softbox', camera: 'macro', colors: ['#bc8b33', '#34516b'], finishes: ['metal', 'ceramic'] },
-  {scene:'desert',lighting:'sunset',camera:'wide',colors:['#e9e4d7','#bc8b33'],finishes:['matte','satin']},
-  {scene:'mountain',lighting:'overcast',camera:'rear',colors:['#637c70','#aab4c2'],finishes:['matte','metal']},
-  {scene:'urban',lighting:'noir',camera:'rearLow',colors:['#111317','#bc303a'],finishes:['gloss','metal']},
-  {scene:'tunnel',lighting:'neon',camera:'front',colors:['#aab4c2','#375fba'],finishes:['metal','gloss']},
-  {scene:'road',lighting:'rim',camera:'low',colors:['#bc8b33','#e9e4d7'],finishes:['satin','gloss']},
-  {scene:'rain',lighting:'moon',camera:'rearLow',colors:['#111317','#aab4c2'],finishes:['gloss','metal']},
-  {scene:'grid',lighting:'bicolor',camera:'overhead',colors:['#60b6c2','#424752'],finishes:['metal','satin']},
-  {scene:'monolith',lighting:'showroom',camera:'left',colors:['#bd879c','#e9e4d7'],finishes:['matte','ceramic']},
-];
+export const LOOKS = STAGES.flatMap(stage=>[stage.camera,stage.camera==='hero'?'low':'hero'].map(camera=>({scene:stage.id,lighting:stage.lighting,camera,colors:['#e9e4d7','#424752',stage.theme.ringColor],finishes:['satin','metal','gloss']})));
 
 const mix = (a, b, amount) => Number((a + (b - a) * amount).toFixed(6));
 const mixColor = (a, b, amount) => '#' + [1, 3, 5].map(index => Math.round(mix(parseInt(a.slice(index, index + 2), 16), parseInt(b.slice(index, index + 2), 16), amount)).toString(16).padStart(2, '0')).join('');
@@ -92,5 +69,9 @@ export function randomizePresentation(state, materials = [], { delta = state.ran
     for(const key of ['roughness','metalness','clearcoat'])values[key]=mix(current[key]??target.original[key]??0,values[key],amount);
     next.materials[state.selectedMaterial]=values;
   }
+  let effectsSeed=(next.scene.seed+(state.effects?.seed||19))>>>0;
+  const effectRandom=()=>{effectsSeed=(Math.imul(effectsSeed,1664525)+1013904223)>>>0;return effectsSeed/4294967296;};
+  next.effects = sparkleEffects(state.effects, next.scene.ringColor, amount, effectRandom, reducedMotion,
+    next.motion.preset === 'turntable' || next.animation?.playing);
   return next;
 }

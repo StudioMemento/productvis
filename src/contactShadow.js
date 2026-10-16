@@ -3,6 +3,7 @@ import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { HorizontalBlurShader } from 'three/addons/shaders/HorizontalBlurShader.js';
 import { VerticalBlurShader } from 'three/addons/shaders/VerticalBlurShader.js';
 import { PLINTH_SIZE } from './cubeStage.js';
+import { effectsAlterCoverage } from './objectEffectsState.js';
 
 const SHADOW_LAYER = 30;
 export const supportHeight = preset => preset === 'void' ? null : preset === 'ring' ? .018 : preset === 'cubes' ? 0 : -.012;
@@ -11,7 +12,7 @@ export function contactShadowPolicy(state, bounds) {
   const gap = ground == null || !bounds ? Infinity : bounds.min.y - ground;
   const half = PLINTH_SIZE / 2;
   const supported = state.scene.preset !== 'cubes' || (bounds && bounds.max.x > -half && bounds.min.x < half && bounds.max.z > -half && bounds.min.z < half);
-  return { ground, visible: ground != null && !!bounds && supported && gap < .18 && gap > -.08 && !state.render.alpha && state.inspection.view === 'pbr' && !state.section.enabled,
+  return { ground, visible: ground != null && !!bounds && supported && gap < .18 && gap > -.08 && !state.render.alpha && state.inspection.view === 'pbr' && !state.section.enabled && !effectsAlterCoverage(state.effects),
     opacity: .82 * Math.max(0,1 - Math.max(0,gap-.04)/.14) };
 }
 

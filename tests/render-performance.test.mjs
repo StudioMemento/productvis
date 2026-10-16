@@ -55,11 +55,11 @@ test('render budgets cap physical pixels from phones to 8K and respect quality o
   assert.equal(renderPixelRatio(1440,900,1), 1);
 });
 
-test('project names and random delta do not touch renderer or material resources', () => {
+test('project names, deltas and axis locks do not touch renderer or material resources', () => {
   const engine = Object.create(StudioEngine.prototype);
   const state = clone(DEFAULT_STATE); engine.config = state; engine.sceneKey = 'initialized';
   let invalidations = 0; engine.invalidate = () => invalidations++;
-  const next = { ...state, name: 'Studio 2', randomDelta: 80 };
+  const next = { ...state, name: 'Studio 2', randomDelta: 80, axes:{...state.axes,env:{delta:20,locked:true}} };
   engine.setState(next);
   assert.equal(engine.config, next); assert.equal(invalidations, 0);
 });
