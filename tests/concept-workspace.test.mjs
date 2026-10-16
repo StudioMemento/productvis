@@ -97,14 +97,23 @@ test('one persistent selection owns the workspace; repeated clicks and dismissal
   menu=workspaceMenu(menu,{type:'toggle',id:'project'});assert.equal(menu.open,'project');assert.equal(menu.category,'product');
   assert.equal(workspaceMenu(menu,{type:'toggle',id:'project'}),menu);
   menu=workspaceMenu(menu,{type:'open',id:'scene'});assert.deepEqual(menu,{category:'scene',open:'scene'});
+<<<<<<< HEAD
   menu=workspaceMenu(menu,{type:'toggle',id:'inspect'});assert.equal(menu.open,'model');
   menu=workspaceMenu(menu,{type:'close'});assert.deepEqual(menu,{category:'scene',open:'model'});
+=======
+  menu=workspaceMenu(menu,{type:'toggle',id:'inspect'});assert.equal(menu.open,'inspect');
+  menu=workspaceMenu(menu,{type:'close'});assert.deepEqual(menu,{category:'scene',open:'inspect'});
+>>>>>>> 10e60a6124e91f2ebd4d0716d2ef74e1804cf295
   menu=workspaceMenu(menu,{type:'toggle',id:'scene'});assert.equal(menu.open,'scene');
   assert.equal(workspaceMenu(menu,{type:'toggle',id:'scene'}),menu);
   assert.equal(workspaceMenu(menu,{type:'open',id:'invalid'}),menu);
   for(const id of ['product','scene','lighting','camera','motion','model','inspect','project','render','export','post']){
     menu=workspaceMenu(menu,{type:'open',id});
+<<<<<<< HEAD
     assert.equal(menu.open,({post:'motion',inspect:'model',render:'project'}[id]||id));
+=======
+    assert.equal(menu.open,id==='post'?'motion':id);
+>>>>>>> 10e60a6124e91f2ebd4d0716d2ef74e1804cf295
     for(const type of ['toggle','close','hide','escape','outside','unknown'])assert.equal(workspaceMenu(menu,{type,id}),menu);
   }
 });
@@ -113,7 +122,11 @@ test('the last workspace survives a reload and unavailable or malformed storage 
   let saved;const storage={getItem:()=>saved,setItem:(_key,value)=>{saved=value;}};
   assert.deepEqual(restoreWorkspaceMenu(storage),INITIAL_MENU);
   for(const menu of [{category:'motion',open:'motion'},{category:'camera',open:'render'},{category:'scene',open:'model'},{category:'motion',open:'export'},{category:'lighting',open:'post'}]){
+<<<<<<< HEAD
     persistWorkspaceMenu(menu,storage);assert.deepEqual(restoreWorkspaceMenu(storage),menu.open==='post'?{category:'motion',open:'motion'}:{...menu,open:({inspect:'model',render:'project'}[menu.open]||menu.open)});
+=======
+    persistWorkspaceMenu(menu,storage);assert.deepEqual(restoreWorkspaceMenu(storage),menu.open==='post'?{category:'motion',open:'motion'}:menu);
+>>>>>>> 10e60a6124e91f2ebd4d0716d2ef74e1804cf295
   }
   for(const value of ['broken','null','{}','{"category":"scene","open":null}','{"category":"bad","open":"product"}']){
     saved=value;assert.deepEqual(restoreWorkspaceMenu(storage),INITIAL_MENU);
@@ -121,6 +134,7 @@ test('the last workspace survives a reload and unavailable or malformed storage 
   saved='{"category":"scene","open":"camera"}';assert.deepEqual(restoreWorkspaceMenu(storage),{category:'camera',open:'camera'});
   const blocked={getItem(){throw Error('unavailable');},setItem(){throw Error('unavailable');}};
   assert.deepEqual(restoreWorkspaceMenu(blocked),INITIAL_MENU);assert.doesNotThrow(()=>persistWorkspaceMenu(INITIAL_MENU,blocked));
+<<<<<<< HEAD
 });
 
 test('retired stages migrate to curated sets without changing the product, camera or authored effects',()=>{
@@ -129,4 +143,6 @@ test('retired stages migrate to curated sets without changing the product, camer
     const restored=validateProject(makeProject(original,{type:'demo'})).state;
     assert.equal(restored.scene.preset,replacement);assert.deepEqual(restored.camera,original.camera);assert.deepEqual(restored.materials,original.materials);assert.deepEqual(restored.effects,original.effects);
   }
+=======
+>>>>>>> 10e60a6124e91f2ebd4d0716d2ef74e1804cf295
 });

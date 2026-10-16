@@ -106,6 +106,7 @@ Build riuscita, 72 test passati e gate Sites 4/4. I nuovi casi verificano roundt
 Budget massimi: 6.000 punti su touch/qualità Fluida e 16.000 desktop; con skin o morph: 1.400 / 3.600, aggiornati fino a 24 / 30 Hz. Ghost usa 2 / 3 pose di massimo 1.000 / 2.200 punti; Ribbon 4 / 6 nastri con 28 campioni. Le scie registrano coordinate mondo, quindi la camera non trascina il fondale. I campioni seguono triangoli e coordinate baricentriche; alpha e UV usano la cache delle texture sorgenti già presente. Nessun readback del viewport.
 
 Wire glow aggiunge un overlay per mesh condividendo la geometria: il suo costo dipende ancora dal modello importato. Risoluzione adattiva, limite FPS, pausa in background e bloom massimo 0.1 restano attivi. Nessun benchmark GPU implicito nei test matematici e strutturali.
+<<<<<<< HEAD
 
 
 ## Phosphor e history centrale · 16 ottobre 2026
@@ -115,3 +116,5 @@ Phosphor React 2.1.10 sostituisce Tabler e i pittogrammi personalizzati, con imp
 Build corrente: UI iniziale 518.41 KB (147.01 KB gzip), renderer differito 788.77 KB (204.66 KB gzip), CSS 112.67 KB (20.07 KB gzip), valori decimali riportati da Vite. Phosphor include le definizioni dei pesi delle icone importate; il nuovo linguaggio iconografico aumenta il bundle UI. L'avviso dei chunk oltre 500 KB resta visibile. Il GLB e i decoder non sono modificati.
 
 135 test automatici superati. Copertura nuova: perno centrale, slot vuoti, blocco al presente, direzione undo/redo, tap su tacche, annullamento del gesto, tastiera e delta sul perimetro. Il test SSR include i moduli ESM Phosphor nello stesso modo della build. Nessuna nuova verifica browser/GPU/touch reale: il blocco della sessione di anteprima resta attivo.
+=======
+>>>>>>> 10e60a6124e91f2ebd4d0716d2ef74e1804cf295

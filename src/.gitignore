@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.vercel/
+.vite/
+.env
+.env.*
+!.env.example
+*.log
+*.zip
+*.tar
+*.tar.gz
+.DS_Store
+Thumbs.db
