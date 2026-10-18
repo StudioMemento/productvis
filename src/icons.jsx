@@ -25,6 +25,7 @@ import { CircleHalfTiltIcon as PhosphorCircleHalfTilt } from '@phosphor-icons/re
 import { CircleNotchIcon as PhosphorCircleNotch } from '@phosphor-icons/react/dist/csr/CircleNotch';
 import { CirclesThreePlusIcon as PhosphorCirclesThreePlus } from '@phosphor-icons/react/dist/csr/CirclesThreePlus';
 import { CloudIcon as PhosphorCloud } from '@phosphor-icons/react/dist/csr/Cloud';
+import { WavesIcon as PhosphorWaves } from '@phosphor-icons/react/dist/csr/Waves';
 import { CloudRainIcon as PhosphorCloudRain } from '@phosphor-icons/react/dist/csr/CloudRain';
 import { CopySimpleIcon as PhosphorCopySimple } from '@phosphor-icons/react/dist/csr/CopySimple';
 import { CrosshairIcon as PhosphorCrosshair } from '@phosphor-icons/react/dist/csr/Crosshair';
@@ -139,6 +140,7 @@ export const IconUnlock = /* @__PURE__ */ light(PhosphorLockKeyOpen);
 export const IconLamp = /* @__PURE__ */ light(PhosphorLamp);
 export const IconCircleHalfTilt = /* @__PURE__ */ light(PhosphorCircleHalfTilt);
 export const IconCloud = /* @__PURE__ */ light(PhosphorCloud);
+export const IconWaves = /* @__PURE__ */ light(PhosphorWaves);
 export const IconLightning = /* @__PURE__ */ light(PhosphorLightning);
 export const IconSunHorizon = /* @__PURE__ */ light(PhosphorSunHorizon);
 export const IconMoon = /* @__PURE__ */ light(PhosphorMoon);

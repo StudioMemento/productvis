@@ -38,6 +38,19 @@ function environment(state,amount,random,lockedLight) {
     next[key]=mix(base,shifted(clamp(base,min,max),span,1,random,min,max),amount);
   }
   if(!changeStage&&amount>=.4)next.ringColor=color(current.ringColor,theme.ringColor||current.ringColor,amount*.5);
+  if(next.preset==='amber-halo'){
+    for(const [key,span,min,max] of [['haloRadius',.3,3.2,4.5],['haloIntensity',.16,.3,.9],['wetness',.2,.15,.85],['microDetail',.12,.3,.85]]){
+      const base=Number.isFinite(next[key])?next[key]:theme[key];
+      next[key]=mix(base,shifted(clamp(base,min,max),span,1,random,min,max),amount);
+    }
+    next.fog=clamp(next.fog,.08,.5);next.speed=clamp(next.speed,0,.75);
+  }
+  if(['water','cloud'].includes(next.preset)){
+    const ranges=next.preset==='water'?[['waterWaves',.18,.08,.75],['waterScale',.15,.1,.9],['waterRipples',.18,.1,.85]]:
+      [['cloudDensity',.15,.3,.85],['cloudScale',.15,.15,.85],['cloudLevel',.12,-.5,0],['cloudThickness',.18,.6,1.45]];
+    for(const [key,span,min,max] of ranges){const base=Number.isFinite(next[key])?next[key]:theme[key];next[key]=mix(base,shifted(clamp(base,min,max),span,1,random,min,max),amount);}
+    next.speed=clamp(next.speed,0,.8);
+  }
   return next;
 }
 

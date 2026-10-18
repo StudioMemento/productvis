@@ -1,6 +1,6 @@
 import { IconLamp,IconCircleHalfTilt,IconCircleHalf2,IconArrowBarToDown,IconSun,IconLayersIntersect,IconCloud,IconLightning,IconSunHorizon,IconMoon,IconLampPendant,IconCubeTransparent,IconArrowUpRight,IconRectangle,IconRectangleDashed,IconMagnifyingGlassPlus,IconArrowUDownLeft,IconArrowDownRight,IconFocus2,IconMaximize,IconScan,IconArrowLeft,IconPlayerPause,IconWaveSine,IconRotateClockwise,IconPlanet,IconArrowsInLineHorizontal,IconAlignBottomSimple,IconAlignCenterVerticalSimple,IconAlignTopSimple } from './icons.jsx';
 const icons={
-  lighting:{softbox:IconLamp,rim:IconCircleHalfTilt,split:IconCircleHalf2,top:IconArrowBarToDown,warm:IconSun,bicolor:IconLayersIntersect,overcast:IconCloud,neon:IconLightning,sunset:IconSunHorizon,moon:IconMoon,showroom:IconLampPendant,noir:IconCircleHalfTilt},
+  lighting:{halo:IconLampPendant,softbox:IconLamp,rim:IconCircleHalfTilt,split:IconCircleHalf2,top:IconArrowBarToDown,warm:IconSun,bicolor:IconLayersIntersect,overcast:IconCloud,neon:IconLightning,sunset:IconSunHorizon,moon:IconMoon,showroom:IconLampPendant,noir:IconCircleHalfTilt},
   camera:{hero:IconCubeTransparent,low:IconArrowUpRight,front:IconRectangle,profile:IconRectangleDashed,top:IconArrowBarToDown,macro:IconMagnifyingGlassPlus,rear:IconArrowUDownLeft,rearLow:IconArrowDownRight,overhead:IconFocus2,wide:IconMaximize,detail:IconScan,left:IconArrowLeft},
   motion:{still:IconPlayerPause,idle:IconWaveSine,turntable:IconRotateClockwise,orbit:IconPlanet,dolly:IconArrowsInLineHorizontal},
 };

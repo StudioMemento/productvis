@@ -31,6 +31,7 @@ test('contact follows the actual plane and vanishes in void, alpha, diagnostics,
 
 test('contact is cached at rest, throttled during product motion and aligned to the receiving plane',()=>{
   const f=fixture(true),state=clone(DEFAULT_STATE),{shadow,renderer}=f;
+  state.scene.preset='cubes';
   shadow.update(renderer,state,0);assert.equal(f.calls(),3);assert.equal(shadow.target.width,256);
   assert.equal(shadow.plane.visible,true);assert.equal(shadow.plane.position.y,.012);
   shadow.update(renderer,state,16);assert.equal(f.calls(),3,'camera-only frames reuse the contact map');

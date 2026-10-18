@@ -26,8 +26,12 @@ import { renderPixelRatio } from './renderBudget.js';
 import { perspectiveFit } from './cameraFraming.js';
 import { CUSTOM_SCENES, createEnvironmentStage } from './environmentStage.js';
 import { canRecordVideo, recordCanvas, videoSettings } from './playblast.js';
+import {exportFrame} from './exportFrame.js';
 import { ModelAnimation } from './modelAnimation.js';
 import { ObjectEffects } from './objectEffects.js';
+import { StageEnvironment } from './stageEnvironment.js';
+import { configureFloorReflection, updateHaloReflection } from './haloReflection.js';
+import { addHorizonToMaterial, createHorizon } from './stages/horizon.js';
 
 const D = THREE.MathUtils.degToRad;
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -41,6 +45,9 @@ export class StudioEngine {
     this.scene.fog = new THREE.FogExp2('#141820', .026);
     this.backgroundColor = this.scene.background; this.sceneFog = this.scene.fog;
     this.monitor = new PerformanceMonitor(); this.coarse = window.matchMedia('(pointer: coarse)').matches;
+    this.motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    this.motionPreferenceChanged = () => this.invalidate();
+    this.motionPreference.addEventListener?.('change', this.motionPreferenceChanged);
     this.localPlanes = []; this.worldPlanes = []; this.hoverTime = 0;
     this.sectionHelpers = new THREE.Group(); this.scene.add(this.sectionHelpers);
     this.camera = new THREE.PerspectiveCamera(35, 1, .05, 200);
@@ -107,6 +114,7 @@ export class StudioEngine {
     this.environmentTarget = pmrem.fromScene(room, .04);
     this.environment = this.environmentTarget.texture;
     this.scene.environment = this.environment; this.scene.environmentIntensity = .65;
+    this.stageEnvironment = new StageEnvironment(this.renderer, this.scene, this.environment, this.coarse);
     room.dispose(); pmrem.dispose();
     this.controls = new OrbitControls(this.camera, this.canvas);
     this.controls.target.copy(this.target); this.controls.enableDamping = true; this.controls.dampingFactor = .08;
@@ -150,22 +158,14 @@ export class StudioEngine {
   }
 
   setupFloor() {
-    this.floorMaterial = new THREE.MeshStandardMaterial({ color: '#202329', metalness: .4, roughness: .4 });
+    this.horizon=createHorizon(this.config.scene);this.scene.add(this.horizon.sky);
+    this.floorMaterial = addHorizonToMaterial(new THREE.MeshStandardMaterial({ color: '#202329', metalness: .4, roughness: .4 }),this.horizon);
     this.floor = new THREE.Mesh(new THREE.PlaneGeometry(160, 160), this.floorMaterial);
     this.floor.rotation.x = -Math.PI / 2; this.floor.position.y = -.012; this.floor.receiveShadow = true; this.scene.add(this.floor);
     if (this.renderer) {
       this.reflector = new Reflector(new THREE.PlaneGeometry(90, 90), { textureWidth: 512, textureHeight: 512, color: 0x363a40, clipBias: .003 });
       this.reflector.rotation.x = -Math.PI / 2; this.reflector.position.y = -.008;
-      this.reflector.material.transparent = true; this.reflector.material.depthWrite = false;
-      this.reflector.material.uniforms.pvReflection = { value: .27 };
-      this.reflector.material.fragmentShader = this.reflector.material.fragmentShader.replace('uniform vec3 color;', 'uniform vec3 color; uniform float pvReflection;');
-      this.reflector.material.fragmentShader = this.reflector.material.fragmentShader.replace('vec4 base = texture2DProj( tDiffuse, vUv );', `vec2 uv = vUv.xy / vUv.w;
-        vec4 base = texture2D(tDiffuse, uv) * .4;
-        base += texture2D(tDiffuse, uv + vec2(.0015, .002)) * .15;
-        base += texture2D(tDiffuse, uv + vec2(-.0015, .002)) * .15;
-        base += texture2D(tDiffuse, uv + vec2(.002, -.002)) * .15;
-        base += texture2D(tDiffuse, uv + vec2(-.002, -.002)) * .15;`);
-      this.reflector.material.fragmentShader = this.reflector.material.fragmentShader.replace('gl_FragColor = vec4( blendOverlay( base.rgb, color ), 1.0 );', 'gl_FragColor = vec4( blendOverlay( base.rgb, color ), pvReflection );');
+      configureFloorReflection(this.reflector, this);
       this.scene.add(this.reflector);
     }
   }
@@ -311,8 +311,10 @@ export class StudioEngine {
       applyModelTransform(this.placement, config.transform);
       this.contactShadow?.invalidate();
     }
-    const sceneKey = JSON.stringify([config.scene.preset, config.scene.composition, config.scene.scale, config.scene.seed,config.scene.density,config.scene.height,config.scene.spread]);
+    const sceneKey = ['amber-halo','water','cloud','aurora','dust'].includes(config.scene.preset) ? config.scene.preset : JSON.stringify([config.scene.preset, config.scene.composition, config.scene.scale, config.scene.seed,config.scene.density,config.scene.height,config.scene.spread]);
     if (sceneKey !== this.sceneKey) { this.buildStage(config.scene); this.sceneKey = sceneKey; }
+    this.stageEnvironment?.setStage(this.customStage, config.scene);
+    this.haloReflectionDirty = true;
     if (force || previous.lighting !== config.lighting) this.applyLights(config.lighting);
     const bg = config.scene.preset === 'cubes' ? '#101722' : config.scene.preset === 'void' ? '#07090c' : config.scene.preset === 'studio' ? '#303741' : '#131820';
     this.backgroundColor.set(config.scene.background||bg); this.sceneFog.color.copy(this.backgroundColor);
@@ -320,18 +322,20 @@ export class StudioEngine {
     this.scene.fog = config.render.alpha ? null : this.sceneFog;
     this.renderer?.setClearColor(0x000000, config.render.alpha ? 0 : 1);
     this.stage.visible = !config.render.alpha;
-    this.sceneFog.density = config.scene.preset === 'void' ? .002 + config.scene.fog * .04 : .012 + config.scene.fog * .075;
+    if(this.horizon){this.horizon.update(config.scene);this.horizon.sky.visible=!config.render.alpha&&!['void','cubes'].includes(config.scene.preset);}
+    this.sceneFog.density = this.customStage?.isAmberHalo ? .007 + config.scene.fog * .015 : config.scene.preset === 'void' ? .002 + config.scene.fog * .04 : .012 + config.scene.fog * .075;
     this.floorMaterial.roughness = config.scene.floorRoughness;
     this.floorMaterial.color.set(config.scene.groundColor||'#1b1f25');
     this.floor.visible = !config.render.alpha && this.customStage?.floorVisible!==false && !['void', 'cubes','road'].includes(config.scene.preset);
     if (this.cubeBaseMaterial) {this.cubeBaseMaterial.roughness = config.scene.floorRoughness;this.cubeBaseMaterial.color.set(config.scene.groundColor);}
-    this.customStage?.update(config.scene,this.environmentTime||0);
+    this.customStage?.update(config.scene,this.environmentTime||0,this.stageContext());
     if (this.reflector) {
-      this.reflector.visible = !config.render.alpha && config.inspection.view === 'pbr' && !['void','road'].includes(config.scene.preset) && config.scene.reflection > .015 && config.quality !== 'fluid';
+      this.reflector.visible = !config.render.alpha && config.inspection.view === 'pbr' && !['void','road','water'].includes(config.scene.preset) && config.scene.reflection > .015 && config.quality !== 'fluid';
       const surfaceScale = config.scene.preset === 'cubes' ? (PLINTH_SIZE - .14) / 90 : (this.customStage?.reflectionSpan||90)/90;
       this.reflector.scale.set(surfaceScale, surfaceScale, 1);
-      this.reflector.position.y = config.scene.preset === 'cubes' ? .007 : -.008;
+      this.reflector.position.y = this.customStage?.reflectionY ?? (config.scene.preset === 'cubes' ? .007 : -.008);
       this.reflector.material.uniforms.pvReflection.value = config.scene.reflection;
+      updateHaloReflection(this.reflector, this.customStage, config, this.coarse, this.sceneFog.density);
     }
     if (this.particles) { this.particles.visible = ['cinema', 'particles', 'cubes'].includes(config.scene.preset) && config.scene.particles > 0; this.particles.material.opacity = config.scene.particles * (config.scene.preset === 'particles' ? .8 : .18); }
     if (this.ring) this.ring.material.color.set(config.scene.ringColor);
@@ -504,7 +508,8 @@ export class StudioEngine {
   buildStage(s) {
     while (this.stage.children.length) { const item = this.stage.children[0]; this.stage.remove(item); this.disposeObject(item); }
     this.ring = null; this.outerRing = null; this.particles = null; this.cubeBaseMaterial = null; this.customStage=null;this.environmentTime=0;
-    if(CUSTOM_SCENES.includes(s.preset)){this.customStage=createEnvironmentStage(s,this.coarse);this.stage.add(this.customStage.group);}
+    this.haloReflectionTime = -Infinity;
+    if(CUSTOM_SCENES.includes(s.preset)){this.customStage=createEnvironmentStage(s,this.coarse,this.horizon);this.stage.add(this.customStage.group);this.customStage.bindReflection?.(this.reflector,this);}
     if (s.preset === 'cubes') {
       const { group, baseMaterial } = createCubeStage(s);
       this.cubeBaseMaterial = baseMaterial; this.stage.add(group);
@@ -517,13 +522,20 @@ export class StudioEngine {
     this.stage.add(this.particles);
   }
 
+  stageContext() {
+    return { lighting: this.config.lighting, inspection: this.config.inspection, quality: this.config.quality,alpha:this.config.render.alpha,
+      reducedMotion: this.motionPreference?.matches, recording: !!this.recording };
+  }
+
   frameCamera(s) {
     this.motionFramePending = true;
     const w = this.size.width, h = this.size.height;
-    this.camera.aspect = w / h; this.camera.setFocalLength(s.focal);
-    const right = this.presentation ? 0 : Math.min(w * .6, this.workspaceInsets?.right || 0);
-    const bottom = this.presentation ? 0 : Math.min(h * .65, this.workspaceInsets?.bottom || 0);
-    this.camera.setViewOffset(w, h, right / 2, bottom / 2, w, h);
+    const frame=this.exportPreview&&!this.recording?exportFrame(w,h,this.workspaceInsets,this.exportPreview):null;
+    this.camera.aspect = frame?frame.width/frame.height:w/h; this.camera.setFocalLength(s.focal);
+    const right = frame||this.presentation ? 0 : Math.min(w * .6, this.workspaceInsets?.right || 0);
+    const bottom = frame||this.presentation ? 0 : Math.min(h * .65, this.workspaceInsets?.bottom || 0);
+    if(frame)this.camera.setViewOffset(frame.width,frame.height,-frame.x,-frame.y,w,h);
+    else this.camera.setViewOffset(w, h, right / 2, bottom / 2, w, h);
     this.camera.updateProjectionMatrix();
     const bounds = this.model ? worldBounds(this.model) : null;
     const size = bounds ? bounds.getSize(V()) : this.modelSize;
@@ -537,7 +549,7 @@ export class StudioEngine {
     const direction = V(Math.sin(D(s.azimuth))*Math.cos(D(s.elevation)),Math.sin(D(s.elevation)),Math.cos(D(s.azimuth))*Math.cos(D(s.elevation)));
     const framingBounds = bounds?.clone() || new THREE.Box3().setFromCenterAndSize(center,size);
     let fit = perspectiveFit(framingBounds,target,direction,fov,this.camera.aspect,(w-right)/w,(h-bottom)/h);
-    if (this.config.motion.playing && ['turntable','orbit'].includes(this.config.motion.preset)) {
+    if ((frame||this.config.motion.playing) && ['turntable','orbit'].includes(this.config.motion.preset)) {
       // Preserve room for the length revealed by rotation after the initial shot.
       fit = Math.max(fit,Math.max(size.x,size.z)/(2*Math.tan(fov/2)*this.camera.aspect*.8*(w-right)/w));
     }
@@ -606,6 +618,12 @@ export class StudioEngine {
     if(!this.manual&&!this.settling){this.frameCamera(this.config.camera);this.clearOrbitInertia();this.transition=true;}this.invalidate();
   }
   setTab(tab) { this.activeTab = tab; this.setSelected(this.config.selectedMaterial, tab === 'product'); }
+  setExportPreview(settings){
+    if(JSON.stringify(this.exportPreview||null)===JSON.stringify(settings||null))return;
+    this.exportPreview=settings||null;
+    if(this.recording)return;
+    this.frameCamera(this.config.camera);this.clearOrbitInertia();this.transition=true;this.invalidate();
+  }
   setPresentation(value) { if(this.presentation===value)return;this.presentation = value; this.events.onHover?.(null); if(this.recording)return;this.frameCamera(this.config.camera);this.clearOrbitInertia();this.transition = true; this.invalidate(); }
   setFocusMode(value) { this.focusMode = value; this.canvas.style.cursor = value ? 'crosshair' : 'grab'; }
 
@@ -689,7 +707,11 @@ export class StudioEngine {
     const drifting = this.stage.visible && this.particles?.visible && this.particles.material.opacity > 0;
     if (drifting) this.particles.rotation.y += delta * .007;
     this.environmentTime=(this.environmentTime||0)+delta;
-    const environmentMoving=this.stage.visible&&this.customStage?.update(this.config.scene,this.environmentTime);
+    const environmentMoving=this.stage.visible&&this.customStage?.update(this.config.scene,this.environmentTime,this.stageContext());
+    const previousEnvironment = this.scene.environment;
+    const environmentPending=this.stageEnvironment?.update(time, !!this.recording);
+    if(previousEnvironment !== this.scene.environment)this.haloReflectionDirty=true;
+    if (this.transition || this.manual || this.settling || controlsChanged || moving || animation?.moving) this.haloReflectionDirty = true;
     if (this.bokeh?.enabled) {
       const point = this.config.camera.focusPoint ? this.focusPoint.fromArray(this.config.camera.focusPoint) : this.controls.target;
       this.bokeh.uniforms.focus.value = this.config.camera.autoFocus ? this.camera.position.distanceTo(point) : this.config.camera.focus;
@@ -697,12 +719,13 @@ export class StudioEngine {
     if (this.worldPlanes.length) this.updateSectionTransform();
     const effectsMoving=this.effects?.update(delta,{camera:this.camera,height:this.size.height*this.renderer.getPixelRatio(),deforming:!!animation?.moving,
       forcePose:!!this.recording,absoluteTime:this.recording?this.effectsVideoTime:undefined});
+    if(effectsMoving)this.haloReflectionDirty=true;
     if(this.effects?.enabled&&!this.recording&&time-(this.lastEffectsReport||0)>120){this.lastEffectsReport=time;this.events.onEffectsTime?.(this.effects.cursor);}
     this.renderer.info.reset();
     this.contactShadow?.update(this.renderer,this.config,time,(moving && motion.preset==='turntable')||animation?.moving,!!this.recording&&(motion.preset==='turntable'||!!this.config.animation?.playing));
     this.composer.render(delta);
     this.rendering = false;
-    const active = !!(this.transition || this.manual || this.settling || controlsChanged || moving || (animation?.moving&&!animation.ended) || drifting || environmentMoving || effectsMoving);
+    const active = !!(this.transition || this.manual || this.settling || controlsChanged || moving || (animation?.moving&&!animation.ended) || drifting || environmentMoving || environmentPending || effectsMoving || (this.customStage?.usesCachedReflection && (this.reflector?.visible||this.customStage.reflectionActive) && this.haloReflectionDirty));
     const report = this.monitor.sample(time, targetFps, this.config.render.adaptive);
     if (report && !this.recording) { this.reportStats(report); if (report.changed) this.resize(); }
     if (!active) { this.monitor.reset(); this.reportStats({ idle: true }); }
@@ -724,7 +747,7 @@ export class StudioEngine {
     const saved={config:this.config,camera:this.camera.clone(),target:this.controls.target.clone(),size:{...this.size},dpr:this.renderer.getPixelRatio(),presentation:this.presentation,
       position:this.product.position.clone(),quaternion:this.product.quaternion.clone(),desiredPosition:this.desiredPosition.clone(),desiredTarget:this.desiredTarget.clone(),
       motionPosition:this.motionPosition?.clone(),motionTarget:this.motionTarget?.clone(),motionTime:this.motionTime,motionBaseAngle:this.motionBaseAngle,animationTime:this.animations?.time,
-      transition:this.transition,motionFramePending:this.motionFramePending,helpers:this.sectionHelpers.visible,environmentTime:this.environmentTime,enabled:this.controls.enabled,particleRotation:this.particles?.rotation.y,effects:this.effects?.snapshot()};
+      transition:this.transition,motionFramePending:this.motionFramePending,helpers:this.sectionHelpers.visible,environmentTime:this.environmentTime,stagePhase:this.customStage?.phase,enabled:this.controls.enabled,particleRotation:this.particles?.rotation.y,effects:this.effects?.snapshot()};
     this.recording=true;this.loop.setPaused(true);this.controls.enabled=false;
     try{
       this.clearOrbitInertia();this.manual=false;this.settling=false;this.presentation=true;this.sectionHelpers.visible=false;
@@ -752,6 +775,8 @@ export class StudioEngine {
       this.desiredPosition.copy(saved.desiredPosition);this.desiredTarget.copy(saved.desiredTarget);this.motionPosition=saved.motionPosition;this.motionTarget=saved.motionTarget;this.motionTime=saved.motionTime;this.motionBaseAngle=saved.motionBaseAngle;
       this.transition=saved.transition;this.motionFramePending=saved.motionFramePending;this.environmentTime=saved.environmentTime;this.sectionHelpers.visible=saved.helpers;this.controls.enabled=saved.enabled;this.scrubPending=false;if(this.particles)this.particles.rotation.y=saved.particleRotation;
       this.animations?.seek(saved.animationTime||0);
+      if(Number.isFinite(saved.stagePhase))this.customStage?.restorePhase?.(saved.stagePhase,saved.environmentTime);
+      this.haloReflectionDirty=true;this.haloReflectionTime=-Infinity;
       if(saved.effects)this.effects?.restore(saved.effects);this.effectsVideoTime=undefined;
       this.recording=false;
       if(!this.disposed){
@@ -766,6 +791,8 @@ export class StudioEngine {
     // Render and request the snapshot in the same task; no retained drawing buffer.
     const helpers = this.sectionHelpers.visible; this.sectionHelpers.visible = false;
     try {
+      this.stageEnvironment?.update(performance.now(), true);
+      this.haloReflectionDirty=true;this.haloReflectionTime=-Infinity;
       this.effects?.update(0,{camera:this.camera,height:this.size.height*this.renderer.getPixelRatio(),forcePose:true});
       this.contactShadow?.update(this.renderer,this.config,performance.now(),false,true);
       this.composer.render(0);
@@ -779,6 +806,7 @@ export class StudioEngine {
       if (node.geometry) geometries.add(node.geometry);
       for (const mat of Array.isArray(node.material) ? node.material : node.material ? [node.material] : []) {
         materials.add(mat); for (const value of Object.values(mat)) if (value?.isTexture && value !== this.environment) textures.add(value);
+        for(const texture of mat.userData?.ownedTextures||[])textures.add(texture);
       }
     });
     geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); textures.forEach(t => t.dispose());
@@ -789,6 +817,8 @@ export class StudioEngine {
     clearTimeout(this.hoverTimer);
     this.canvas.removeEventListener('pointermove', this.pointerMove); this.canvas.removeEventListener('pointerleave', this.pointerLeave);
     document.removeEventListener('visibilitychange', this.visibilityChanged);
+    this.motionPreference.removeEventListener?.('change', this.motionPreferenceChanged);
+    this.stageEnvironment?.dispose();
     this.effects?.dispose();this.releaseInspection();
     this.animations?.dispose();this.contactShadow?.dispose();
     this.resizeObserver.disconnect(); this.controls?.dispose(); this.draco?.dispose();

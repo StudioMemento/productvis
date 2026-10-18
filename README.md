@@ -2,7 +2,7 @@
 
 Prototipo interattivo React + Three.js della direzione approvata: prodotto a tutto viewport, UI flottante, icone Phosphor, cinque assi in squircle e controlli essenziali su blur progressivo del fondale senza bordi.
 
-**Stato:** build e logica verificate con test automatici. Collaudo visivo, touch, prestazioni GPU ed esportazione PNG/video su dispositivi reali ancora da completare: la sessione di sviluppo non dispone di un browser WebGL utilizzabile. Il pacchetto include la configurazione Vercel e le istruzioni in `DEPLOY_VERCEL.md`.
+**Atmosfera e console compatta:** mappe procedurali più definite, nuovi stage Aurora e Dust, history continua con aggancio al rilascio, toolbar a quattro comandi e navbar ridotta. 160 test automatici e compilazione/linking di 21 programmi shader superati. UI controllata a 390 × 844 e 320 × 640 nel browser; WebGL non disponibile, quindi resa, prestazioni GPU e touch reale restano da verificare. Dettagli in `ATMOSPHERE_CONSOLE.md`; precedenti Water/Cloud e Amber Halo in `WATER_CLOUD.md` e `AMBER_HALO.md`. Configurazione Vercel in `DEPLOY_VERCEL.md`.
 
 ## Avvio
 
@@ -31,21 +31,21 @@ Le immagini di riserva WebP si caricano solo quando WebGL non è disponibile. Vi
 
 ## Assi, delta e controlli tattili
 
-**MAT, ENV, LIGHT, CAM, FX** sono cinque assi indipendenti. Memento sta in alto a sinistra; fullscreen, generatore globale e strumenti tecnici in alto a destra. Un solo blocco di proprietà, con uno scroll verticale, è seguito dalla history tattile e dalla navbar. Una sola navbar sui telefoni; su desktop orizzontale da 1024 px è disponibile anche la copia nel player.
+**MAT, ENV, LIGHT, CAM, FX** sono cinque assi indipendenti. Memento sta in alto a sinistra; in alto a destra Modello, Progetto, Esporta e Fullscreen, in questo ordine. Il generatore globale sta nella fascia del chevron, allineato al comando destro della history. Un solo blocco di proprietà, con uno scroll verticale, è seguito dalla history tattile e dalla navbar. Una sola navbar sui telefoni; su desktop orizzontale da 1024 px è disponibile anche la copia nel player.
 
 Ogni asse ha un’icona Phosphor in uno squircle: il bordo ambra indica il **delta 0–100**, senza riempire il pittogramma. Drag verticale regola il delta; tap seleziona il contesto e genera solo quell’asse; tap sul nome apre solo il contesto. Il valore compare durante la regolazione o il focus da tastiera. Sotto, lucchetto, dot/pill del pannello e reset: la pill ambra indica esclusivamente il pannello aperto.
 
-Chevron down attiva la modalità semplificata. Solo chevron up riapre le proprietà; selezioni, generazioni, undo/redo, picking ed Escape non la sbloccano. Le due maniglie del separatore regolano la stessa dimensione: altezza sul dock inferiore, larghezza sulla colonna laterale. Il canvas continua sotto il blur reale sfumato, senza fondale colorato o bordi dei gruppi.
+Chevron down attiva la modalità semplificata. Solo chevron up riapre le proprietà; selezioni, generazioni, undo/redo, picking ed Escape non la sbloccano. La fascia ai lati del chevron resta trascinabile e raggiungibile da tastiera per ridimensionare il pannello; linee e maniglie grafiche sono rimosse. Le dimensioni si regolano anche da Progetto → Workspace. Il canvas continua sotto il blur reale sfumato, senza fondale colorato o bordi dei gruppi.
 
-La **history** ha un perno centrale fisso. A sinistra le tacche degli stati precedenti, a destra eventuali stati ripristinabili; gli slot vuoti sono punti centrati. Swipe/drag a sinistra torna indietro, a destra ripete, bloccandosi al presente. Tap su una tacca seleziona lo stato; tap su uno slot vuoto non fa avanzare. Escape o annullamento del gesto ripristinano la posizione iniziale. Massimo 80 modifiche, un passo per gesto; una nuova modifica dopo Undo elimina il ramo redo.
+La **history** ha un perno centrale fisso. A sinistra le tacche degli stati precedenti, a destra eventuali stati ripristinabili; gli slot vuoti sono punti centrati. Swipe/drag a sinistra torna indietro, a destra ripete, bloccandosi al presente. Il righello si muove in continuo; la scena viene ripristinata una sola volta al rilascio, oppure dopo 140 ms di pausa della rotella. Tap su una tacca seleziona lo stato; tap su uno slot vuoto non fa avanzare. Escape o annullamento del gesto ripristinano la posizione iniziale. Massimo 80 modifiche, un passo per gesto; una nuova modifica dopo Undo elimina il ramo redo.
 
 Il delta locale parte da 100, il globale da 35. Sparkle usa `delta effettivo = delta globale × delta asse / 100` sui soli assi sbloccati. Il tap locale usa esclusivamente il delta dell’asse. Zero, tutti gli assi bloccati o nessuna superficie idonea producono un vero no-op. I lucchetti proteggono dalle generazioni; i controlli manuali rimangono disponibili. Delta e lock sono salvati nel `.pvis`, ma restano fuori dalla history.
 
 A delta effettivo basso (<40) si rifinisce il setup corrente; da 40 si reinterpretano finiture, rig e FX nello stesso stage; da 70 ENV e CAM possono esplorare un nuovo stage e una nuova inquadratura. La generazione combina palette, rapporti key/fill/rim, ottiche e movimenti contenuti. L’esposizione appartiene a CAM; FX preserva il DOF. Cambiare ENV non reinquadra CAM né riavvia movimento o scie.
 
 - **MAT:** superficie selezionata, colori, finiture, PBR, ottica ed emissione. Il random modifica solo una superficie opaca idonea, conservando alpha, UV e gli altri materiali.
-- **ENV:** Void, Cube, Studio, Rain, Ring, Velocity Lines. Stage modulari, atmosfera, palette, composizione e flusso ambientale. I progetti legacy migrano gli stage ritirati conservando gli altri assi.
-- **LIGHT:** 12 rig studio; key/fill/rim, direzione, altezza, morbidezza, temperatura, colori, ambiente e riflessi.
+- **ENV:** Amber Halo, Water, Cloud, Aurora, Dust, Void, Cube, Studio, Rain, Ring, Velocity Lines. Stage modulari, atmosfera, palette, composizione e flusso ambientale. I progetti legacy migrano gli stage ritirati conservando gli altri assi.
+- **LIGHT:** 13 rig studio, incluso Halo Studio; key/fill/rim, direzione, altezza, morbidezza, temperatura, colori, ambiente e riflessi.
 - **CAM:** inquadratura, ottica, esposizione, fuoco, bokeh e movimento di presentazione.
 - **FX:** effetti di superficie, particelle e scie; mix, trasporto, parametri avanzati e post-produzione.
 
@@ -55,6 +55,12 @@ Ogni generazione e reset è una sola modifica annullabile. Reset cambia solo l�
 
 Knob: drag verticale, frecce, Home/End; Shift per regolazioni fini e numero modificabile nei pannelli. Delta: drag, frecce, Page Up/Down, Home/End. Tab: tap, frecce orizzontali, Home/End. History: frecce, Page Up/Down, Home/End. Shortcut: `1–5` assi, `H` modalità semplificata, `Spazio` trasporto, `Ctrl/Cmd Z` annulla, `Ctrl/Cmd Shift Z` e `Ctrl/Cmd Y` ripeti.
 
+I numeri si editano nell’unità visibile: 25% si scrive 25, la virgola e il punto decimale sono accettati. Un valore fuori intervallo mostra un errore senza applicarsi. Invio conferma una volta; Escape annulla e restituisce il focus. Anche i drag lunghi restano una sola modifica; un gesto annullato o tornato al valore iniziale conserva il ramo redo.
+
+Il contesto resta visibile durante lo scroll; gli indici saltano ai gruppi di CAM, FX e Modello. Il delta locale ha un’alternativa numerica nel titolo; delta globale e dimensione del pannello hanno controlli a tap in Progetto. L’orbita conserva pannello e scroll. Il picking apre MAT solo se le proprietà sono già aperte.
+
+Il progetto segnala le modifiche rispetto all’ultima apertura o copia. Demo, importazione GLB, apertura .pvis e ricaricamento del 3D chiedono come gestire il lavoro modificato. **Salva copia** crea il file e avvia il download; l’app non può attestare che sia stato conservato sul dispositivo. Il salvataggio non cancella la history.
+
 ## Effetti sul prodotto
 
 Gli shader modificano la resa senza riscrivere texture o materiali salvati. Il ripristino rimuove gli effetti; i progetti precedenti partono senza shader attivi. Punti, dispersioni e scie seguono le mesh animate e i ritagli alpha della texture colore. Ghost echo usa sagome puntinate delle pose precedenti; Ribbon registra il movimento reale del prodotto. La sola orbita della camera non crea scie. I filamenti avvolgono l’ingombro del prodotto, senza simulazione fisica.
@@ -63,7 +69,7 @@ Pausa e fase sono indipendenti dalle clip GLB. Il .pvis conserva la fase attuale
 
 ## Modello nello spazio
 
-In **Modello**, Importa GLB sostituisce il modello attivo; Demo ripristina la NSX. L’importazione conserva i materiali originali e normalizza la dimensione massima a 4.7 unità di scena: i valori di posizione sono unità normalizzate, non metri. Le tre sezioni sempre visibili Posizione / Rotazione / Scala espongono knob tattili e valori modificabili. Posizione ±10, rotazione ±180°, scala 0.1–3×. La scala è uniforme per conservare le proporzioni.
+In **Modello**, Carica modello sostituisce il modello attivo; Demo ripristina la NSX. L’importazione conserva i materiali originali e normalizza la dimensione massima a 4.7 unità di scena: i valori di posizione sono unità normalizzate, non metri. Le tre sezioni sempre visibili Posizione / Rotazione / Scala espongono knob tattili e valori modificabili. Posizione ±10, rotazione ±180°, scala 0.1–3×. La scala è uniforme per conservare le proporzioni.
 
 Centra allinea l’ingombro reale agli assi X/Z; Appoggia porta la parte inferiore sul piano della scena, dopo eventuali rotazioni. Inquadra ritrova l’intero modello nella vista Hero, anche dopo spostamento o ridimensionamento. Reset ripristina la posa e ferma l’animazione. Le trasformazioni mettono in pausa il movimento, sono annullabili e si salvano nel `.pvis`; sparkle le conserva. Sostituire il modello le azzera, mentre aprire un progetto le ripristina. I vecchi file restano compatibili.
 
@@ -88,13 +94,15 @@ L’**ombra di contatto** viene proiettata dalla parte inferiore del modello sul
 
 **FPS** limita l'animazione a 30/60 (Auto: 30 con puntatore touch, 60 con mouse). Le modifiche dirette rimangono immediate. Risoluzione 50–100% moltiplica il budget della qualità scelta; Adattiva può ridurla ulteriormente fino al 60% di quel valore e recupera gradualmente. Non cambia l'inquadratura. Il monitor misura FPS consegnati e intervallo p95 tra i frame, non durata GPU; Idle indica che il renderer dorme. È un obiettivo di fluidità, non una garanzia di FPS.
 
-Telefoni e tablet verticali usano un dock inferiore alto un terzo del viewport, con minimo di 400 px limitato al 65% dello schermo. La maniglia regola l’altezza in verticale e la larghezza in orizzontale. Il minimo di trascinamento verticale è 352 px, limitato al 65% nei viewport corti; in orizzontale si conserva almeno un player di 300 px. Doppio click o Invio ripristinano la dimensione iniziale. Frecce regolano 16 px, Shift+frecce 40 px, Home/End i limiti, Escape annulla il drag. Le due preferenze sono ricordate separatamente nel browser, fuori dal progetto; il renderer si reinquadra al rilascio. Desktop e telefoni orizzontali mantengono la colonna. Il blur sfuma dal basso o da destra secondo il layout. L’inquadratura usa gli angoli proiettati dell’ingombro del prodotto: nelle viste frontali la lunghezza dell’auto non forza più uno shot lontano. Ottica ed emissione condividono una griglia di cinque elementi, su una riga quando c’è spazio e 3+2 centrati nelle colonne strette. Tutte le regolazioni restano salvate nel progetto e annullabili.
+Telefoni e tablet verticali usano un dock inferiore: default max(400 px, 46% dell’altezza), minimo di resize max(340 px, 34%), entrambi limitati al 65% dello schermo. Anche sotto 636 px di larghezza si usa il dock. La colonna laterale ha minimo 336 px e conserva almeno 300 px al player. Doppio click o Invio sulla maniglia ripristinano la dimensione iniziale; frecce regolano 16 px, Shift+frecce 40 px, Home/End i limiti, Escape annulla il drag. Compatto / Standard / Ampio offrono un’alternativa a tap. Le preferenze di layout sono ricordate nel browser, fuori dal .pvis; il renderer si reinquadra al rilascio. Il blur sfuma dal basso o da destra secondo il layout. L’inquadratura usa gli angoli proiettati dell’ingombro del prodotto. Ottica ed emissione condividono una griglia di cinque elementi, su una riga quando c’è spazio e 3+2 centrati nelle colonne strette.
 
 ## Animazioni e playblast
 
 In CAM → Movimento, Ciclo stabilisce la durata nominale, Velocità la moltiplica, Fase permette di scrubbiare la posa in pausa. Curva Smooth o Lineare, verso e loop completano il controllo; Riavvolgi torna all’inizio. Il sistema controlla i movimenti di presentazione del prodotto e della camera, non le animazioni scheletriche incorporate nei GLB.
 
 Esporta → Playblast esporta **solo il canvas**, senza UI, guide o evidenza del materiale. Formati 16:9, 9:16 e 1:1; lato corto 720 o 1080 px; richiesta 24, 30 o 60 FPS; durata da 2 a 20 secondi. La clip parte dalla fase iniziale e usa il movimento configurato, anche se l’anteprima è in pausa. Per un ciclo completo imposta la durata della clip a Ciclo / Velocità, entro il limite di 20 secondi.
+
+Il riepilogo mostra pixel effettivi, durata, FPS richiesti e codec disponibile. **Guide formato nel player** applica il rapporto del video alla camera e mostra il rettangolo di uscita; la guida DOM non entra nel file. Il PNG cattura l’intero viewport alla risoluzione indicata e riporta lo stato alpha.
 
 MP4 o WebM vengono scelti tra i codec supportati dal browser. La cattura è **in tempo reale**: i frame dipendono da GPU e encoder; non è una render queue offline e non garantisce gli FPS richiesti. Mantieni visibile la scheda. Annulla o Esc interrompono la registrazione; camera, dimensioni e stato vengono ripristinati anche in caso di errore. Le modifiche e il caricamento di altri modelli sono bloccati durante la cattura. Per la trasparenza usa PNG: il video richiede sfondo alpha disattivato.
 
@@ -106,7 +114,7 @@ Le dimensioni e la logica di cattura/ripristino sono testate; codec effettivo, q
 - Shader, luce, DOF, riflessi, orientamento/inquadratura del modello e fluidità su GPU reali restano da verificare. Il renderer non è un path tracer; apertura e morbidezza sono regolazioni di una simulazione in tempo reale.
 - La configurazione agisce sui materiali GLB. Un canale UV è una mappatura, non identifica automaticamente parti o isole selezionabili. Maschere indipendenti per isola UV e decal richiedono un'estensione dedicata.
 - Importazione GLB con risorse incorporate fino a 120 MB; progetto fino a 180 MB. Clip, skin e morph GLB sono supportati; KTX2/Basis e asset che dipendono da file esterni non sono il target di questa versione.
-- Salvataggio e apertura del formato sono coperti dai test di roundtrip; download, importazione UI e resa della nuova console richiedono verifica in browser.
+- Salvataggio e apertura del formato sono coperti dai test di roundtrip; avvio del download verificato nella UI. Il file scaricato e la riapertura completa con un GLB importato richiedono ancora una verifica sul dispositivo.
 - Undo riguarda lo stato del setup, non la sostituzione del modello. Non sono presenti autosalvataggio cloud, collaborazione o backend.
 - Le nuove scene sono composizioni procedurali stilizzate; non sono ambienti fotorealistici o asset esterni.
 

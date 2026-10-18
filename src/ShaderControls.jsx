@@ -15,12 +15,12 @@ export function ShaderControls({state,change,field,knob,disabled,cursor=0,onRest
   const blocked=disabled||!active,particle=fx.particles!=='none'||fx.trail!=='none';
   return <div className="shader-controls"><div className="shader-scope"><span>Intero prodotto</span><button className="text-action" disabled={disabled} onClick={reference}>Point sculpture ↗</button></div><PropertyPair><div className="property-bank visual-bank">
     {Object.entries(EFFECT_GROUPS).map(([group,items])=><ControlBlock key={group} title={TYPES[group]} wide><VariantGrid label={`Shader ${TYPES[group].toLowerCase()}`} items={[{id:'none',name:'Nessuno'},...items.map(([id,name])=>({id,name}))]} selected={fx[group]} onChoose={id=>choose(group,id)} disabled={disabled} renderSymbol={item=><EffectSymbol id={item.id}/>}/></ControlBlock>)}
-    </div><div className="property-bank parameter-bank"><ControlBlock title="Mix" wide><KnobGrid>{knob('effects','intensity','Intensità',{disabled:blocked})}{knob('effects','speed','Velocità',{min:0,max:2,step:.05,format:v=>`${v.toFixed(2)}×`,disabled:blocked})}{knob('effects','solid','Solido',{disabled:blocked})}</KnobGrid>
+    </div><div className="property-bank parameter-bank"><ControlBlock title="Mix" wide><KnobGrid>{knob('effects','intensity','Intensità',{disabled:blocked})}{knob('effects','speed','Velocità',{min:0,max:2,step:.05,unit:'×',format:v=>`${v.toFixed(2)}×`,disabled:blocked})}{knob('effects','solid','Solido',{disabled:blocked})}</KnobGrid>
       <div className="animation-transport"><Tool label={fx.playing?'Pausa shader':'Riproduci shader'} disabled={blocked} onClick={()=>field('effects','playing',!fx.playing)}>{fx.playing?<IconPlayerPause size={20}/>:<IconPlayerPlay size={20}/>}</Tool><Tool label="Riavvia shader e scie" disabled={blocked} onClick={onRestart}><IconRefresh size={18}/></Tool><ColorControl label="Colore FX" value={fx.color} disabled={blocked} onChange={v=>field('effects','color',v)}/></div>
     </ControlBlock>
     <ControlBlock title="Particelle · forma" wide><KnobGrid>
       {knob('effects','density','Densità',{min:.05,disabled:disabled||!particle})}
-      {knob('effects','size','Dimensione',{min:.25,max:2,step:.05,format:v=>`${v.toFixed(2)}×`,disabled:disabled||!particle})}
+      {knob('effects','size','Dimensione',{min:.25,max:2,step:.05,unit:'×',format:v=>`${v.toFixed(2)}×`,disabled:disabled||!particle})}
       {knob('effects','spread','Dispersione',{disabled:disabled||!['scatter','flow','filaments'].includes(fx.particles)})}
       {knob('effects','length','Lunghezza',{disabled:disabled||(fx.trail==='none'&&fx.particles!=='streaks')})}
     </KnobGrid></ControlBlock>

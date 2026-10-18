@@ -1,5 +1,10 @@
 // History is a relative rail: the selected state is always at its center.
-export const HISTORY_STEP = 16;
+export const HISTORY_STEP = 24;
+export const historyPosition = (start,distance,total,step=HISTORY_STEP) => Math.max(0,Math.min(total,start+distance/step));
+export const historyWheelDistance = event => {
+  const delta=Math.abs(event.deltaX)>Math.abs(event.deltaY)?event.deltaX:event.deltaY;
+  return Math.max(-96,Math.min(96,delta*(event.deltaMode===1?16:event.deltaMode===2?240:1)))*.5;
+};
 export function historySlots(cursor,total,radius=32){
   return Array.from({length:radius*2+1},(_,i)=>{
     const offset=i-radius,index=cursor+offset;

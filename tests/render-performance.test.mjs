@@ -72,7 +72,7 @@ test('engine sleeps with invisible particles, but keeps visible particle motion 
     let renders = 0;
     Object.assign(engine, {
       config: clone(DEFAULT_STATE), ready: true, renderer: { info: { reset() {} } }, transition: false, lastFrame: 0,
-      stage: { visible: true }, worldPlanes: [], monitor: new PerformanceMonitor(), reportStats() {},
+      scene: { environment: null }, stage: { visible: true }, worldPlanes: [], monitor: new PerformanceMonitor(), reportStats() {},
       controls: { update: () => false }, composer: { render: () => renders++ },
       particles: { visible: true, material: { opacity: 0 }, rotation: { y: 0 } },
     });

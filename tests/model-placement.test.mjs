@@ -63,6 +63,7 @@ test('framing includes the placed model and scales the camera distance with its 
 
 test('a translated product cannot leave a contact shadow beyond the cube support',()=>{
   const f=fixture(),state=clone(DEFAULT_STATE),shadow=new ContactShadow(f.scene);
+  state.scene.preset='cubes';
   applyModelTransform(f.placement,{...DEFAULT_TRANSFORM,x:8});assert.equal(contactShadowPolicy(state,worldBounds(f.model)).visible,false);
   assert.ok(shadow.plinthPlanes.every(plane=>plane.distanceToPoint(v())>0));
   for(const point of [v(4,0,0),v(-4,0,0),v(0,0,4),v(0,0,-4)])assert.ok(shadow.plinthPlanes.some(plane=>plane.distanceToPoint(point)<0));

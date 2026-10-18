@@ -52,5 +52,5 @@ export function WorkspaceResizeHandle({layout,disabled,edge=''}) {
       if(event.key==='Enter'){event.preventDefault();layout.reset();return;}
       const size=resizeFromKey(event.key,layout.size,layout.bounds,layout.bottom,event.shiftKey);
       if(size!==null){event.preventDefault();layout.setSize(size);}
-    }}><span className="resize-grip" aria-hidden="true"><i/><i/></span></div>;
+    }}/>;
 }

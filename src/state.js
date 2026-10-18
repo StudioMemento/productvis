@@ -4,12 +4,15 @@ import { STAGES, RETIRED_STAGES } from './stageCatalog.js';
 import { DEFAULT_ANIMATION, validateAnimation } from './animationState.js';
 import { DEFAULT_EFFECTS, validateEffects } from './objectEffectsState.js';
 import { defaultAxes, validateAxes } from './axisState.js';
+import { HALO_RANGES, HALO_DEFAULTS } from './stages/amberHaloSettings.js';
+import { NATURE_RANGES } from './stages/natureSettings.js';
 export const TABS = ['product', 'scene', 'lighting', 'camera', 'motion'];
-export const CUSTOM_SCENES=['rain','ring','velocity-lines'];
+export const CUSTOM_SCENES=['rain','ring','velocity-lines','amber-halo','water','cloud','aurora','dust'];
 export const TAB_LABELS = { product: 'MAT', scene: 'ENV', lighting: 'LIGHT', camera: 'CAM', motion: 'FX', post: 'Post', inspect: 'Ispeziona', render: 'Render', project: 'Modello' };
 export const PRESETS = {
   scene: STAGES.map(({id,name})=>({id,name})),
   lighting: [
+    { id: 'halo', name: 'Halo Studio' },
     { id: 'softbox', name: 'Softbox' }, { id: 'rim', name: 'Rim' }, { id: 'split', name: 'Split' },
     { id: 'top', name: 'Top' }, { id: 'warm', name: 'Warm' }, { id: 'bicolor', name: 'Bicolor' },
     { id: 'overcast', name: 'Cloud' }, { id: 'neon', name: 'Neon' }, { id: 'sunset', name: 'Sunset' },
@@ -18,8 +21,8 @@ export const PRESETS = {
   camera: [
     { id: 'hero', name: 'Hero' }, { id: 'low', name: 'Bassa' }, { id: 'front', name: 'Frontale' },
     { id: 'profile', name: 'Profilo' }, { id: 'top', name: "Dall’alto" }, { id: 'macro', name: 'Macro' },
-    { id: 'rear', name: 'Retro' }, { id: 'rearLow', name: 'Rear low' }, { id: 'overhead', name: 'Zenith' },
-    { id: 'wide', name: 'Wide' }, { id: 'detail', name: 'Dettaglio' }, { id: 'left', name: 'Sinistra' },
+    { id: 'rear', name: 'Retro' }, { id: 'rearLow', name: 'Retro basso' }, { id: 'overhead', name: 'Zenitale' },
+    { id: 'wide', name: 'Ampia' }, { id: 'detail', name: 'Dettaglio' }, { id: 'left', name: 'Sinistra' },
   ],
   product: [
     { id: 'original', name: 'Originale' }, { id: 'matte', name: 'Opaco' }, { id: 'satin', name: 'Satinato' },
@@ -38,6 +41,7 @@ export const FINISHES = {
   ceramic: { roughness: .2, metalness: 0, clearcoat: .85 },
 };
 export const LIGHT_RIGS = {
+  halo: { key: 3.8, fill: 1.2, rim: 3.6, temperature: 6500, tint: 'warm', softness: 88, elevation: 62, ambient: .16, environment: .8, keyColor: '#dce7f7', fillColor: '#a1b5d2', rimColor: '#ffd4a4' },
   softbox: { key: 5, fill: 3, rim: 2, temperature: 6000, tint: 'neutral', softness: 85 },
   rim: { key: 3.3, fill: 1.4, rim: 7, temperature: 4500, tint: 'warm', softness: 60 },
   split: { key: 6, fill: .25, rim: 2.2, temperature: 5200, tint: 'neutral', softness: 35 },
@@ -75,9 +79,9 @@ export const SWATCHES = [
 ];
 export const DEFAULT_STATE = {
   name: 'Studio 01',
-  scene: { preset: 'cubes', composition: 1, scale: 1, seed: 12, fog: .25, particles: .45, floorRoughness: .4, reflection: .27, ringColor: '#ffb020',background:'#101722',groundColor:'#272e38',density:.5,height:1,spread:1,weather:.5,glitch:.25,speed:.6 },
-  lighting: { preset: 'rim', intensity: 1, rotation: 0, ...LIGHT_RIGS.rim },
-  camera: { preset: 'hero', ...CAMERA_ANGLES.hero, aperture: 5.6, exposure: -.15, autoFocus: true, focus: 6, focusPoint: null, targetPoint:null, orbitRadius:null, bokeh:.5, shotDelta:25 },
+  scene: { ...HALO_DEFAULTS, preset: 'amber-halo', composition: 1, scale: 1, seed: 12, density:.5,height:1,spread:1,weather:.5,glitch:.25,...SCENE_THEMES['amber-halo'] },
+  lighting: { preset: 'halo', intensity: 1, rotation: 0, ...LIGHT_RIGS.halo },
+  camera: { preset: 'hero', ...CAMERA_ANGLES.hero, distance:1.18,elevation:15,focal:45, aperture: 8, exposure: -.15, autoFocus: true, focus: 6, focusPoint: null, targetPoint:null, orbitRadius:null, bokeh:.25, shotDelta:25 },
   motion: { preset: 'still', playing: false, speed: 1, direction: 1, loop: true, axis: 'y', amplitude: 360, travel: .3, duration:12, cursor:0, easing:'smooth' },
   animation: { ...DEFAULT_ANIMATION },
   effects: { ...DEFAULT_EFFECTS },
@@ -116,7 +120,7 @@ export function validateProject(input) {
   const s = clone(input.state), result = clone(DEFAULT_STATE);
   if(RETIRED_STAGES[s.scene?.preset])s.scene={...s.scene,...SCENE_THEMES[RETIRED_STAGES[s.scene.preset]],preset:RETIRED_STAGES[s.scene.preset]};
   const ranges = {
-    scene: { composition: [0, 2], scale: [.55, 1.5], seed: [0, 100000], fog: [0, 1], particles: [0, 1], floorRoughness: [0, 1], reflection: [0, .8],density:[0,1],height:[.3,2],spread:[.6,1.8],weather:[0,1],glitch:[0,1],speed:[0,2] },
+    scene: { ...HALO_RANGES, ...NATURE_RANGES, composition: [0, 2], scale: [.55, 1.5], seed: [0, 100000], fog: [0, 1], particles: [0, 1], floorRoughness: [0, 1], reflection: [0, .8],density:[0,1],height:[.3,2],spread:[.6,1.8],weather:[0,1],glitch:[0,1],speed:[0,2] },
     lighting: { intensity: [0, 2], rotation: [-180, 180], key: [0, 10], fill: [0, 10], rim: [0, 10], temperature: [2000, 9000], softness: [0, 100],elevation:[5,85],ambient:[0,1.5],environment:[0,2] },
     camera: { azimuth: [-180, 180], elevation: [1, 85], distance: [.25, 2.5], focal: [18, 150], aperture: [1.4, 16], exposure: [-2, 2], focus: [.2, 50],bokeh:[0,1],shotDelta:[0,100] },
     motion: { speed: [.25, 3], amplitude: [1, 360], travel: [.05, .6],duration:[3,30],cursor:[0,1] },

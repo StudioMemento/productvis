@@ -44,14 +44,22 @@ npm run preview
 
 Apri l’indirizzo HTTP indicato da Vite. Il doppio clic su `index.html` non esegue correttamente moduli e modello.
 
-## Revisione inclusa
+## Revisione inclusa · Atmosfera e console compatta
+
+- Mappe cemento 1024² desktop / 512² touch, densità lineare quadruplicata; Aurora e Dust con flusso regolabile.
+- Toolbar Modello → Progetto → Esporta → Fullscreen; delta globale in basso nella fascia del chevron, navbar compatta e Carica modello subito visibile. History continua: drag applicato al rilascio, rotella con aggancio. Dettagli in `ATMOSPHERE_CONSOLE.md`.
+- Pavimento e cielo si raccordano con una transizione lunga; bordo dei riflessi attenuato. Nuovi stage Water e Cloud con shader animati, parametri ENV, salvataggio, Undo e generazione indipendente. Dettagli in `WATER_CLOUD.md`.
+
+- Primo stage della nuova direzione lookdev: cemento con mappe procedurali, anello emissivo incassato, riflesso rugoso, foschia e probe di illuminazione. Parametri dedicati in ENV, rig Halo Studio in LIGHT. Dettagli in `AMBER_HALO.md`.
 
 - Icone Phosphor Light in strumenti, preset e assi. Cinque squircle con delta sul perimetro, drag verticale e tap per generare.
 - Perno centrale della history, tacche per gli stati e punti per gli slot vuoti. Sinistra annulla; destra ripete e si blocca al presente.
 - Proprietà, history e navbar in un solo blocco. Una navbar su mobile; chevron up per uscire dalla modalità semplificata.
-- Mesh per modello/ispezione/clip; ingranaggio per rendering/progetto; rec-square per PNG/playblast. Stage: Void, Cube, Studio, Rain, Ring, Velocity Lines.
+- Mesh per modello/ispezione/clip; ingranaggio per rendering/progetto; rec-square per PNG/playblast. Stage: Amber Halo, Water, Cloud, Aurora, Dust, Void, Cube, Studio, Rain, Ring, Velocity Lines.
+- Editing nell’unità visibile con validazione, focus recuperato e annullamento dei gesti. Pannello minimo 336 px, contesto essenziale e gruppi sempre aperti.
+- Progetto modificato riconoscibile, protezione delle sostituzioni e Salva copia. Riepilogo di export e guida del formato video nel player.
 
-Build e test automatici verificano logica, markup, gesti e compatibilità dei progetti. Il collaudo visivo, touch reale, WebGL e video sul dispositivo resta da completare. Il playblast registra in tempo reale: gli FPS effettivi dipendono dal dispositivo. Alpha disponibile per il PNG.
+160 test automatici verificano logica, markup, gesti, budget e compatibilità dei progetti. Compilazione/linking di 21 programmi shader verificati con GLES software. Console verificata a 390 × 844 e 320 × 640; Aurora/Dust, drag history 2→0 e rotella 0→2 controllati nel browser in fallback statico. Touch reale, resa finale, prestazioni WebGL e file PNG/video sul dispositivo restano da completare. Il playblast registra in tempo reale: gli FPS effettivi dipendono dal dispositivo. Alpha disponibile per il PNG. Dettagli UI precedenti in `UI_UX_V003_3.md`.
 
 Crediti del modello demo in `licenses/MODEL.md`: CC BY-NC-SA 4.0. Phosphor in `licenses/PHOSPHOR.txt`.
 

@@ -48,23 +48,23 @@ test('every current and migrated destination mounts exactly one property region'
     assert.equal(triggers.length,1,id);assert.ok(triggers[0].includes('aria-controls="controls-'+region+'"'));
     assert.ok(s.includes('id="controls-'+region+'"'));
     assert.equal(count(s,/<(?:select|details|summary)\b/g),0);
-    assert.equal(count(s,/aria-label="Delta (?:MAT|ENV|LIGHT|CAM|FX)"/g),5);
+    assert.equal(count(s,/aria-label="Genera (?:MAT|ENV|LIGHT|CAM|FX) · Delta"/g),5);
     assert.equal(count(s,/aria-label="Blocca asse /g),5);assert.equal(count(s,/aria-label="Ripristina asse /g),5);
   }
 });
 test('mesh includes inspection, settings include rendering/project, capture owns PNG/playblast',()=>{
   const panel=id=>restored(id).split('id="controls-'+id+'"')[1].split('<nav id="productvis-navigation"')[0];
   const model=panel('model'),settings=panel('project'),capture=panel('export');
-  for(const label of ['Importa GLB','Posizione X','Rotazione X','Scala modello','Facce','Alpha','UV','Ispeziona','Animazioni GLB','Sezioni XYZ'])assert.ok(model.includes(label),label);
-  for(const label of ['Nome progetto','Salva .pvis','Apri .pvis','Qualità','MSAA','FPS','Risoluzione','Adattiva','Monitor rendering'])assert.ok(settings.includes(label),label);
-  assert.ok(!settings.includes('Importa GLB'));assert.ok(!settings.includes('Esporta clip'));
+  for(const label of ['Carica modello','Posizione X','Rotazione X','Scala modello','Facce','Alpha','UV','Ispeziona','Animazioni GLB','Sezioni XYZ'])assert.ok(model.includes(label),label);
+  for(const label of ['Nome progetto','Salva copia','Apri .pvis','Qualità','MSAA','FPS','Risoluzione','Adattiva','Monitor rendering'])assert.ok(settings.includes(label),label);
+  assert.ok(!settings.includes('Carica modello'));assert.ok(!settings.includes('Esporta clip'));
   for(const label of ['Esporta frame PNG','Sfondo alpha','Playblast','Formato','Durata','Esporta clip'])assert.ok(capture.includes(label),label);
   assert.ok(!capture.includes('MSAA'));
 });
 test('all retained stages have vector previews and only the selected one is active',()=>{
   for(const p of PRESETS.scene){
     const s=html(StageLibrary,{selected:p.id,onChoose(){}});
-    assert.equal(count(s,/<button/g),6);assert.equal(count(s,/aria-pressed="true"/g),1);
+    assert.equal(count(s,/<button/g),PRESETS.scene.length);assert.equal(count(s,/aria-pressed="true"/g),1);
     for(const stage of PRESETS.scene)assert.ok(s.includes(stage.name));
     assert.ok(!/<canvas|<img|stage-carousel/.test(s));
   }
@@ -135,8 +135,8 @@ test('tap generates once, vertical drag only changes delta, cancellation restore
     const p=element.props,event={button:0,pointerId:1,clientY:100,preventDefault(){},currentTarget:{focus(){},setPointerCapture(){}}};
     return {p,event,values,generations,contexts};
   };
-  const tap=run();tap.p.onPointerDown(tap.event);tap.p.onPointerUp(tap.event);tap.p.onClick();assert.equal(tap.generations.length,1);assert.equal(tap.values.length,0);
-  const drag=run();drag.p.onPointerDown(drag.event);drag.p.onPointerMove({...drag.event,clientY:60});drag.p.onPointerUp(drag.event);drag.p.onClick();assert.deepEqual(drag.values,[80]);assert.equal(drag.generations.length,0);
+  const tap=run();tap.p.onPointerDown(tap.event);tap.p.onPointerUp(tap.event);tap.p.onClick({detail:1});assert.equal(tap.generations.length,1);assert.equal(tap.values.length,0);
+  const drag=run();drag.p.onPointerDown(drag.event);drag.p.onPointerMove({...drag.event,clientY:60});drag.p.onPointerUp(drag.event);drag.p.onClick({detail:1});assert.deepEqual(drag.values,[80]);assert.equal(drag.generations.length,0);
   const cancel=run();cancel.p.onPointerDown(cancel.event);cancel.p.onPointerMove({...cancel.event,clientY:150});cancel.p.onPointerCancel(cancel.event);assert.equal(cancel.values.at(-1),50);assert.equal(cancel.generations.length,0);
   const lock=run({blocked:true,locked:true});lock.p.onPointerDown(lock.event);lock.p.onPointerUp(lock.event);assert.equal(lock.generations.length,0);
   lock.p.onKeyDown({key:'ArrowUp',preventDefault(){}});assert.deepEqual(lock.values,[51]);
@@ -165,7 +165,7 @@ test('simplified mode remains closed through context selection and history; only
   let tree=render();assert.equal(content(tree).props['aria-hidden'],false);
   arrow(tree).props.onClick();tree=render();
   assert.equal(content(tree).props.inert,true);assert.equal(arrow(tree).props['aria-label'],'Apri proprietà');
-  assert.ok(tree.props.className.includes('is-presenting'));assert.equal(nav(tree).props.opened,false);
+  assert.ok(find(tree,n=>n.type==='main').props.className.includes('is-presenting'));assert.equal(nav(tree).props.opened,false);
   for(const axis of AXES){
     nav(tree).props.onChange(axis.tab);tree=render();
     assert.equal(nav(tree).props.active,axis.tab);assert.equal(nav(tree).props.opened,false);assert.equal(content(tree).props.inert,true);
@@ -175,7 +175,7 @@ test('simplified mode remains closed through context selection and history; only
   const rail=find(tree,n=>n.type===app.exports.HistoryRail);rail.props.onUndo();rail.props.onRedo();tree=render();
   assert.equal(content(tree).props.inert,true);
   arrow(tree).props.onClick();tree=render();
-  assert.equal(content(tree).props.inert,undefined);assert.ok(!tree.props.className.includes('is-presenting'));
+  assert.equal(content(tree).props.inert,undefined);assert.ok(!find(tree,n=>n.type==='main').props.className.includes('is-presenting'));
   assert.equal(find(tree,n=>n.props?.['data-tech']==='project').props['aria-expanded'],true);
 });
 
@@ -201,26 +201,26 @@ test('history keeps the active slot central and never represents an empty future
 
 const historyGesture=(cursor=5,extra={})=>{
   const calls=[],tree=hooked.exports.HistoryRail({cursor,labels:['A','B','C','D','E'],onSeek:index=>calls.push(index),...extra});
-  const p=tree.props.children[1].props;
+  const p=tree.props.children.find(child=>child.props?.role==='slider').props;
   const event={button:0,pointerId:1,clientX:200,preventDefault(){},stopPropagation(){},currentTarget:{focus(){},setPointerCapture(){},getBoundingClientRect(){return {left:100,width:200};}}};
   return {p,event,calls};
 };
-test('history swipes left to undo, right to redo, and blocks travel beyond the present',()=>{
+test('history drags continuously and restores only the selected release, bounded at the present',()=>{
   const h=historyGesture();h.p.onPointerDown(h.event);
-  h.p.onPointerMove({...h.event,clientX:240});assert.deepEqual(h.calls,[]);
-  h.p.onPointerMove({...h.event,clientX:168});assert.deepEqual(h.calls,[3]);
-  h.p.onPointerMove({...h.event,clientX:184});assert.deepEqual(h.calls,[3,4]);
-  h.p.onPointerMove({...h.event,clientX:260});assert.deepEqual(h.calls,[3,4,5]);
-  h.p.onPointerMove({...h.event,clientX:300});h.p.onPointerUp({...h.event,clientX:300});assert.deepEqual(h.calls,[3,4,5]);
-  const redo=historyGesture(3);redo.p.onPointerDown(redo.event);redo.p.onPointerMove({...redo.event,clientX:232});redo.p.onPointerUp({...redo.event,clientX:232});assert.deepEqual(redo.calls,[5]);
+  for(const clientX of [240,152,176,260,300])h.p.onPointerMove({...h.event,clientX});
+  assert.deepEqual(h.calls,[],'no expensive scene restores while moving');
+  h.p.onPointerUp({...h.event,clientX:300});assert.deepEqual(h.calls,[],'present remains a no-op');
+  const undo=historyGesture();undo.p.onPointerDown(undo.event);undo.p.onPointerMove({...undo.event,clientX:152});
+  assert.deepEqual(undo.calls,[]);undo.p.onPointerUp({...undo.event,clientX:152});assert.deepEqual(undo.calls,[3]);
+  const redo=historyGesture(3);redo.p.onPointerDown(redo.event);redo.p.onPointerMove({...redo.event,clientX:248});redo.p.onPointerUp({...redo.event,clientX:248});assert.deepEqual(redo.calls,[5]);
 });
-test('history taps only existing slots; cancellation restores the gesture origin',()=>{
-  const empty=historyGesture();const tap={...empty.event,clientX:232};empty.p.onPointerDown(tap);empty.p.onPointerUp(tap);assert.deepEqual(empty.calls,[]);
-  const past=historyGesture();const slot={...past.event,clientX:168};past.p.onPointerDown(slot);past.p.onPointerUp(slot);assert.deepEqual(past.calls,[3]);
+test('history taps existing slots; cancellation never restores an intermediate scene',()=>{
+  const empty=historyGesture();const tap={...empty.event,clientX:248};empty.p.onPointerDown(tap);empty.p.onPointerUp(tap);assert.deepEqual(empty.calls,[]);
+  const past=historyGesture();const slot={...past.event,clientX:152};past.p.onPointerDown(slot);past.p.onPointerUp(slot);assert.deepEqual(past.calls,[3]);
   for(const method of ['onPointerCancel','onLostPointerCapture','onKeyDown']){
-    const h=historyGesture();h.p.onPointerDown(h.event);h.p.onPointerMove({...h.event,clientX:152});
-    h.p[method]({...h.event,key:'Escape'});assert.deepEqual(h.calls,[2,5]);
-    h.p.onPointerUp(h.event);assert.deepEqual(h.calls,[2,5]);
+    const h=historyGesture();h.p.onPointerDown(h.event);h.p.onPointerMove({...h.event,clientX:128});
+    h.p[method]({...h.event,key:'Escape'});assert.deepEqual(h.calls,[]);
+    h.p.onPointerUp(h.event);assert.deepEqual(h.calls,[]);
   }
   const disabled=historyGesture(5,{disabled:true});disabled.p.onPointerDown(disabled.event);disabled.p.onPointerMove({...disabled.event,clientX:100});disabled.p.onPointerUp(disabled.event);assert.deepEqual(disabled.calls,[]);
 });
@@ -237,4 +237,15 @@ test('all five axis glyphs use Phosphor and the squircle perimeter reflects delt
     assert.ok(s.includes('stroke-dasharray="'+value+' 100"'));
     assert.ok(s.includes('aria-valuenow="'+value+'"'));assert.ok(!s.includes('<clipPath'));
   }
+});
+
+test('compact console keeps four top tools, the global delta below, and an undecorated seam',()=>{
+  const s=atViewport(390,844,()=>restored('model'));
+  const top=s.split('aria-label="Strumenti ProductVis"')[1].split('</nav>')[0];
+  assert.equal(count(top,/<button/g),4);assert.ok(!top.includes('Genera globale'));
+  const tools=['menu-trigger-model','menu-trigger-project','menu-trigger-export','Schermo intero'].map(name=>top.indexOf(name));
+  assert.ok(tools.every((v,i)=>v>=0&&(!i||v>tools[i-1])));
+  assert.ok(s.indexOf('class="console-header"')<s.indexOf('class="global-generation"'));
+  assert.ok(!s.includes('resize-grip'));assert.ok(!s.includes('section-index'));
+  assert.ok(s.includes('Carica modello'));assert.ok(!s.includes('Modello · spazio'));
 });

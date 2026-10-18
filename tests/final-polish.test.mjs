@@ -9,7 +9,7 @@ import {StudioEngine} from '../src/engine.js';
 import {videoSettings,videoType,recordCanvas} from '../src/playblast.js';
 
 test('expanded environments, lighting, focus and motion controls survive project roundtrips',()=>{
-  assert.equal(PRESETS.scene.length,6);assert.equal(PRESETS.lighting.length,12);assert.equal(PRESETS.camera.length,12);
+  assert.equal(PRESETS.scene.length,11);assert.equal(PRESETS.lighting.length,13);assert.equal(PRESETS.camera.length,12);
   for(const group of ['scene','lighting','camera'])for(const preset of PRESETS[group]){
     const state=applyPreset(clone(DEFAULT_STATE),group,preset.id);
     state.scene.density=.85;state.scene.height=1.8;state.scene.weather=.7;state.scene.glitch=.6;
@@ -24,7 +24,7 @@ test('procedural sets stay bounded, seeded and independent of image assets',()=>
     const s={...applyPreset(clone(DEFAULT_STATE),'scene',preset).scene,density:1};
     const a=createEnvironmentStage(s),b=createEnvironmentStage(s);
     assert.equal(a.group.children.length,b.group.children.length);assert.ok(a.group.children.length<90);
-    let vertices=0;a.group.traverse(o=>{vertices+=o.geometry?.attributes.position.count||0;assert.ok(!o.material?.map);if(o.isInstancedMesh)assert.ok(o.count<=56);});
+    let vertices=0;a.group.traverse(o=>{vertices+=o.geometry?.attributes.position.count||0;assert.ok(!o.material?.map||o.material.map.isDataTexture);if(o.isInstancedMesh)assert.ok(o.count<=56);});
     assert.ok(vertices<15000,`${preset}: geometry budget`);
     assert.deepEqual(a.group.children.map(o=>o.position.toArray()),b.group.children.map(o=>o.position.toArray()));
     assert.deepEqual(a.group.children.filter(o=>o.isInstancedMesh).map(o=>Array.from(o.instanceMatrix.array)),b.group.children.filter(o=>o.isInstancedMesh).map(o=>Array.from(o.instanceMatrix.array)));
@@ -59,7 +59,7 @@ test('explicit animation duration defines a closed cycle and a deterministic scr
 function engineFixture(){
   const engine=Object.create(StudioEngine.prototype),config=clone(DEFAULT_STATE);
   let pixels=1;
-  Object.assign(engine,{config,ready:true,events:{},camera:new THREE.PerspectiveCamera(35,1,.05,200),product:new THREE.Group(),modelSize:new THREE.Vector3(2,1.3,4.7),
+  Object.assign(engine,{config,ready:true,scene:new THREE.Scene(),events:{},camera:new THREE.PerspectiveCamera(35,1,.05,200),product:new THREE.Group(),modelSize:new THREE.Vector3(2,1.3,4.7),
     controls:{enabled:true,enableDamping:true,target:new THREE.Vector3(0,.7,0),update:()=>false},
     size:{width:1200,height:800},desiredPosition:new THREE.Vector3(8,3,9),desiredTarget:new THREE.Vector3(0,.7,0),
     renderer:{getPixelRatio:()=>pixels,setPixelRatio:v=>pixels=v,setSize(){},info:{reset(){}}},composer:{setPixelRatio(){},setSize(){},render(){}},

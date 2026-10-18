@@ -1,11 +1,19 @@
 // Generator locks and deltas remain live UI metadata across undo/redo.
 export class EditHistory {
   constructor(limit=80){this.limit=limit;this.clear();}
-  clear(){this.past=[];this.future=[];this.group=null;}
-  endGesture(){this.group=null;}
+  clear(){this.past=[];this.future=[];this.group=null;this.gesture=null;}
+  beginGesture(){this.gesture={past:[...this.past],future:[...this.future]};this.group=null;}
+  cancelGesture(){if(this.gesture){this.past=this.gesture.past;this.future=this.gesture.future;}this.endGesture();}
+  endGesture(current){
+    if(this.gesture?.before&&current&&JSON.stringify(this.gesture.before)===JSON.stringify(current)){
+      this.past=this.gesture.past;this.future=this.gesture.future;
+    }
+    this.group=null;this.gesture=null;
+  }
   record(before,after,{group=null,label='Modifica',time=Date.now()}={}){
     if(before===after||JSON.stringify(before)===JSON.stringify(after))return false;
-    const merge=group!==null&&this.group?.key===group&&time-this.group.time<900&&!this.future.length;
+    if(this.gesture&&!this.gesture.before)this.gesture.before=structuredClone(before);
+    const merge=group!==null&&this.group?.key===group&&(this.gesture||time-this.group.time<900)&&!this.future.length;
     if(!merge){this.past.push({state:structuredClone(before),label});if(this.past.length>this.limit)this.past.shift();}
     this.future=[];this.group={key:group,time};return true;
   }

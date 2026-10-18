@@ -6,7 +6,11 @@ import { ShaderControls } from './ShaderControls.jsx';
 import { SurfacePolicyControls } from './SurfacePolicyControls.jsx';
 import { TechnicalPanel } from './TechnicalPanel.jsx';
 import { PlayblastControls } from './PlayblastControls.jsx';
-import { Tool, Knob, Presets, Category, Toggle } from './Controls.jsx';
+import { Tool, Knob, Presets, Category, Toggle, ControlGestureContext } from './Controls.jsx';
+import {Modal} from './Modal.jsx';
+import {WorkspaceContext,WorkspaceSizeControls} from './WorkspaceContext.jsx';
+import {projectFingerprint,editLabel} from './projectSession.js';
+import {exportFrame} from './exportFrame.js';
 import { CategoryNavigation } from './CategoryNavigation.jsx';
 import { CategoryPager } from './CategoryPager.jsx';
 import { MaterialPicker } from './MaterialPicker.jsx';
@@ -21,6 +25,7 @@ import { ModelControls } from './ModelControls.jsx';
 import { DEFAULT_TRANSFORM } from './modelTransform.js';
 import { ProgressiveBlur } from './ProgressiveBlur.jsx';
 import { WorkspaceResizeHandle, useWorkspaceResize } from './WorkspaceResize.jsx';
+import {WORKSPACE_TOKENS} from './workspaceLayout.js';
 import { WorkspaceIcon } from './WorkspaceIcon.jsx';
 import { HistoryRail } from './HistoryRail.jsx';
 import { EditHistory, historyShortcut } from './history.js';
@@ -36,10 +41,14 @@ export function App() {
   const [menu,dispatchMenu]=useReducer(workspaceMenu,undefined,restoreWorkspaceMenu),[recording,setRecording]=useState(null);
   const activeCategory=menu.category,technical=TECHNICAL_MENUS.includes(menu.open)?menu.open:null,panelOpen=TABS.includes(menu.open);
   const workspaceScroll=useRef({});
+  const [pendingSection,setPendingSection]=useState(null),[pendingAction,setPendingAction]=useState(null),[savingCopy,setSavingCopy]=useState(false);
+  const [savedFingerprint,setSavedFingerprint]=useState(()=>projectFingerprint(DEFAULT_STATE)),[copyCreated,setCopyCreated]=useState(false);
+  const gestureBefore=useRef(null),allowUnload=useRef(false),projectBusy=useRef(false);
   useEffect(()=>persistWorkspaceMenu(menu),[menu]);
   const [animationClips,setAnimationClips]=useState([]),[animationCursor,setAnimationCursor]=useState(0);
   const [effectsCursor,setEffectsCursor]=useState(0);
   const [exportSettings,setExportSettings]=useState({duration:6,fps:30,size:720,aspect:'16:9'});
+  const [showFrame,setShowFrame]=useState(false);
   const [fullscreen,setFullscreen]=useState(false);
   const recordingRef=useRef(false),recordAbort=useRef(null);recordingRef.current=recording!==null;
   const [hoverTarget, setHoverTarget] = useState(null);
@@ -61,7 +70,10 @@ export function App() {
   const history = useRef(new EditHistory()), toastTimeout = useRef(null), modelRef = useRef({ type: 'demo', name: 'Honda NSX' });
   const fileInput = useRef(null), projectInput = useRef(null), visibilityButton = useRef(null);
   stateRef.current = state;
-  const notify = useCallback((message, bad = false) => { clearTimeout(toastTimeout.current); setToast({ message, bad }); toastTimeout.current = setTimeout(() => setToast(null), bad ? 5000 : 2400); }, []);
+  const notify = useCallback((message, bad = false, recover=false) => { clearTimeout(toastTimeout.current); setToast({ message, bad,recover }); toastTimeout.current = setTimeout(() => setToast(null), bad ? 5000 : 4000); }, []);
+  const dirty=projectFingerprint(state)!==savedFingerprint;
+  const guard=(label,run)=>{if(projectBusy.current||recordingRef.current)return;if(dirty)setPendingAction({label,run});else run();};
+  useEffect(()=>{const beforeUnload=e=>{if(dirty&&!allowUnload.current){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',beforeUnload);return()=>window.removeEventListener('beforeunload',beforeUnload);},[dirty]);
   useEffect(()=>{
     const update=()=>setFullscreen(!!(document.fullscreenElement||document.webkitFullscreenElement));
     document.addEventListener('fullscreenchange',update);document.addEventListener('webkitfullscreenchange',update);
@@ -84,7 +96,7 @@ export function App() {
     const prev = stateRef.current, next = typeof updater === 'function' ? updater(prev) : updater;
     if(next===prev)return;
     if(record){
-      const label=labelOverride||(group?.startsWith('material')?'Materiale':({scene:'Stage',lighting:'Luce',camera:'Camera',motion:'Movimento',effects:'FX',post:'Post',render:'Rendering',transform:'Modello',animation:'Clip',name:'Nome progetto'}[group?.split('.')[0]]||'Modifica'));
+      const label=labelOverride||editLabel(group);
       if(!history.current.record(prev,next,{group,label}))return;
       setHistoryView(history.current.view);
     }
@@ -100,20 +112,21 @@ export function App() {
     return { ...s, selectedMaterial:id, materials:{ ...s.materials, [id]:{ ...current, ...alpha, ...patch } } };
   }, `material.${id}.${Object.keys(patch).join('.')}`);
   const closeShader = useCallback(() => setHoverTarget(null), []);
-  const travelHistory=useCallback((direction,index)=>{
+  const travelHistory=useCallback((direction,index,options={})=>{
     if(recordingRef.current)return;
     manualBefore.current=null;
+    const previous=history.current.view,actionLabel=direction==='undo'?previous.labels[previous.cursor-1]:previous.labels[previous.cursor];
     const current=stateRef.current,next=direction==='seek'?history.current.seek(current,index):history.current[direction](current);
     if(next===current)return;
     stateRef.current=next;setState(next);setHistoryView(history.current.view);
     setEffectsCursor(next.effects.phase);setAnimationCursor(next.animation.cursor);
     setFocusPick(false);engine.current?.setFocusMode(false);
-    notify(direction==='undo'?'Annullato':direction==='redo'?'Ripristinato':'Cronologia');
+    if(!options.quiet)notify(direction==='undo'?`Annullato · ${actionLabel}`:direction==='redo'?`Ripristinato · ${actionLabel}`:history.current.view.cursor===history.current.view.labels.length?'Presente':history.current.view.labels[history.current.view.cursor-1]||'Inizio');
   },[notify]);
   const undo=useCallback(()=>travelHistory('undo'),[travelHistory]);
   const redo=useCallback(()=>travelHistory('redo'),[travelHistory]);
   const selectCategory = useCallback(id => { if(recordingRef.current)return;if (TABS.includes(id)) { dispatchMenu({type:'open',id});setHoverTarget(null); setFocusPick(false); engine.current?.setFocusMode(false); } }, []);
-  const acceptModel = useCallback((meta, descriptor, restoreState = null) => {
+  const acceptModel = useCallback((meta, descriptor, restoreState = null,clean=false) => {
     if (!meta) return;
     setHoverTarget(null);
     setAnimationClips(meta.animations||[]);setAnimationCursor(restoreState?.animation?.cursor||0);
@@ -121,6 +134,7 @@ export function App() {
     const next = restoreState ? { ...restoreState, materials: { ...meta.initial, ...restoreState.materials }, selectedMaterial: meta.materials.some(m => m.id === restoreState.selectedMaterial) ? restoreState.selectedMaterial : meta.selected } : { ...stateRef.current, materials: meta.initial, selectedMaterial: meta.selected, camera: clone(DEFAULT_STATE.camera), motion: clone(DEFAULT_STATE.motion), animation:clone(DEFAULT_STATE.animation), transform: { ...DEFAULT_TRANSFORM } };
     next.animation={...next.animation,clip:Math.min(next.animation.clip,Math.max(0,(meta.animations?.length||0)-1)),playing:!!meta.animations?.length&&next.animation.playing};
     manualBefore.current=null;history.current.clear(); setHistoryView(history.current.view); stateRef.current = next; setState(next); setLoadingModel(false); setError(''); engine.current?.setState(next, { immediate: true });
+    setSavedFingerprint(clean?projectFingerprint(next):null);setCopyCreated(false);
   }, []);
   useEffect(() => {
     let cancelled = false, instance;
@@ -152,7 +166,7 @@ export function App() {
     ready.then(async value => {
       if (!value) return;
       const meta = await value.loadModel('/models/demo.glb', true);
-      if (!cancelled) acceptModel(meta, { type: 'demo', name: 'Honda NSX' });
+      if (!cancelled) acceptModel(meta, { type: 'demo', name: 'Honda NSX' },null,true);
     }).catch(e => { if (!cancelled && e.name !== 'AbortError') { setError(e.message); setLoadingModel(false); } });
     return () => {recordAbort.current?.abort(); cancelled = true; clearTimeout(toastTimeout.current); instance?.dispose(); engine.current = null; };
   }, [acceptModel, change, notify, selectCategory]);
@@ -167,6 +181,7 @@ export function App() {
   }, [presentation, engineReady, closeShader]);
   useEffect(() => {
     const keyDown = e => {
+      if(e.target.closest?.('[role="dialog"]'))return;
       if(recordingRef.current){if(e.key==='Escape')recordAbort.current?.abort();return;}
       if (e.key === 'Escape') { closeShader(); setShowCredits(false); setFocusPick(false); engine.current?.setFocusMode(false);return; }
       if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable) return;
@@ -178,8 +193,8 @@ export function App() {
     }; window.addEventListener('keydown', keyDown); return () => window.removeEventListener('keydown', keyDown);
   }, [change, selectCategory, undo, redo, closeShader]);
 
-  const loadDemo = async () => { if(recordingRef.current)return;setLoadingModel(true); setProgress(0); setError(''); try { const instance = await enginePromise.current; if (!instance || instance.disposed) return; const meta = await instance.loadModel('/models/demo.glb', true); if (!meta) return; acceptModel(meta, { type: 'demo', name: 'Honda NSX' }); notify('Modello demo caricato'); } catch (e) { if (e.name !== 'AbortError') { setError(e.message); setLoadingModel(false); } } };
-  const importModel = async file => {
+  const loadDemoNow = async () => { if(recordingRef.current)return;setLoadingModel(true); setProgress(0); setError(''); try { const instance = await enginePromise.current; if (!instance || instance.disposed) return; const meta = await instance.loadModel('/models/demo.glb', true); if (!meta) return; acceptModel(meta, { type: 'demo', name: 'Honda NSX' }); notify('Modello demo caricato'); } catch (e) { if (e.name !== 'AbortError') { setError(e.message); setLoadingModel(false); } } };
+  const importModelNow = async file => {
     if (!file||recordingRef.current) return; if (!/\.glb$/i.test(file.name)) { notify('Scegli un modello in formato GLB.', true); return; }
     if (file.size > 120 * 1024 * 1024) { notify('Per questa anteprima usa un GLB fino a 120 MB.', true); return; }
     setLoadingModel(true); setProgress(0); setError('');
@@ -187,20 +202,31 @@ export function App() {
     if (fileInput.current) fileInput.current.value = '';
   };
   const saveProject = async () => {
-    try { const model = modelRef.current.type === 'demo' ? modelRef.current : { type: 'embedded', name: modelRef.current.name, data: await fileBase64(new Blob([modelRef.current.buffer], { type: 'model/gltf-binary' })) }; download(new Blob([JSON.stringify(makeProject({...stateRef.current,animation:{...stateRef.current.animation,cursor:engine.current?.animations?.cursor??stateRef.current.animation.cursor},effects:{...stateRef.current.effects,phase:engine.current?.effects?.cursor??stateRef.current.effects.phase}}, model))], { type: 'application/json' }), `${state.name.replace(/[^\p{L}\p{N}_-]+/gu, '-') || 'ProductVis'}.pvis`); notify('Download avviato'); } catch { notify('Non è stato possibile salvare il progetto.', true); }
+    if(savingCopy)return false;setSavingCopy(true);
+    const snapshot=clone(stateRef.current),descriptor=modelRef.current;
+    const output={...snapshot,animation:{...snapshot.animation,cursor:engine.current?.animations?.cursor??snapshot.animation.cursor},effects:{...snapshot.effects,phase:engine.current?.effects?.cursor??snapshot.effects.phase}};
+    try {
+      const model=descriptor.type==='demo'?descriptor:{type:'embedded',name:descriptor.name,data:await fileBase64(new Blob([descriptor.buffer],{type:'model/gltf-binary'}))};
+      download(new Blob([JSON.stringify(makeProject(output,model))],{type:'application/json'}),`${snapshot.name.replace(/[^\p{L}\p{N}_-]+/gu,'-')||'ProductVis'}.pvis`);
+      setSavedFingerprint(projectFingerprint(snapshot));setCopyCreated(true);notify('Copia .pvis creata · download avviato');return true;
+    }catch{notify('Non è stato possibile creare la copia.',true);return false;}finally{setSavingCopy(false);}
   };
-  const openProject = async file => {
+  const openProjectNow = async file => {
     if (!file||recordingRef.current) return;
     try {
       if (file.size > 180 * 1024 * 1024) throw new Error('Il progetto supera il limite di questa anteprima.');
       const parsed = validateProject(JSON.parse(await file.text())); if(recordingRef.current)return;setLoadingModel(true); setProgress(0); let buffer;
       if (parsed.model.type === 'embedded') { const str = atob(parsed.model.data.split(',')[1]), bytes = new Uint8Array(str.length); for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i); buffer = bytes.buffer; }
       const instance = await enginePromise.current; if (!instance || instance.disposed) return;
-      const meta = await instance.loadModel(buffer || '/models/demo.glb', !buffer); if (!meta) return; acceptModel(meta, buffer ? { type: 'embedded', name: parsed.model.name, buffer } : { type: 'demo', name: 'Honda NSX' }, parsed.state); notify('Progetto aperto');
+      const meta = await instance.loadModel(buffer || '/models/demo.glb', !buffer); if (!meta) return; acceptModel(meta, buffer ? { type: 'embedded', name: parsed.model.name, buffer } : { type: 'demo', name: 'Honda NSX' }, parsed.state,true); notify('Progetto aperto');
     } catch (e) { if (e.name === 'AbortError') return; setLoadingModel(false); notify(e instanceof SyntaxError ? 'Questo file non è un progetto ProductVis.' : e.message, true); }
     if (projectInput.current) projectInput.current.value = '';
   };
-  const exportImage = async () => { try { const blob = await engine.current.capture(); download(blob, `${state.name || 'ProductVis'}.png`); notify('Immagine esportata'); } catch (e) { notify(e.message, true); } };
+  const runProjectAction=async run=>{projectBusy.current=true;try{await run();}finally{projectBusy.current=false;}};
+  const loadDemo=()=>guard('Caricare la demo',()=>runProjectAction(loadDemoNow));
+  const importModel=file=>{if(file)guard('Sostituire il modello',()=>runProjectAction(()=>importModelNow(file)));if(fileInput.current)fileInput.current.value='';};
+  const openProject=file=>{if(file)guard('Aprire un progetto',()=>runProjectAction(()=>openProjectNow(file)));if(projectInput.current)projectInput.current.value='';};
+  const exportImage = async () => { try { const blob = await engine.current.capture(); download(blob, `${state.name || 'ProductVis'}.png`); notify('PNG prodotto · download avviato'); } catch (e) { notify(e.message, true); } };
   const choosePreset = (category, id) => { const original = materials.find(m => m.id === stateRef.current.selectedMaterial)?.original; change(s => applyPreset(s, category, id, original),null,true,({product:'Finitura',scene:'Stage',lighting:'Rig luce',camera:'Inquadratura',motion:'Movimento'}[category]||'Preset')); };
   const selectedMaterial = materials.find(m => m.id === state.selectedMaterial);
   const mat = state.materials[state.selectedMaterial] || { color: '#424752', overlay: 0, roughness: .32, metalness: .65, clearcoat: .2, opacity: 1, normalScale: 1, finish: 'original' };
@@ -210,7 +236,7 @@ export function App() {
   const seekAnimation=cursor=>{updateAnimation({cursor,playing:false});setAnimationCursor(cursor);const instance=engine.current;instance?.animations?.seek(cursor*instance.animations.duration);instance?.contactShadow?.invalidate();instance?.invalidate();};
   const exportClip=async settings=>{
     if(!gpu||!canUse||recordingRef.current)return;const wasPresenting=presentation;recordingRef.current=true;recordAbort.current=new AbortController();setRecording(0);setPresentation(true);
-    try{const result=await engine.current.captureVideo({...settings,signal:recordAbort.current.signal,onProgress:value=>setRecording(Math.round(value*100))});download(result.blob,`${stateRef.current.name||'ProductVis'}.${result.extension}`);notify('Clip esportata');}
+    try{const result=await engine.current.captureVideo({...settings,signal:recordAbort.current.signal,onProgress:value=>setRecording(Math.round(value*100))});download(result.blob,`${stateRef.current.name||'ProductVis'}.${result.extension}`);notify('Clip prodotta · download avviato');}
     catch(error){if(error.name!=='AbortError')notify(error.message,true);}
     finally{recordingRef.current=false;setRecording(null);recordAbort.current=null;setPresentation(wasPresenting);}
   };
@@ -221,7 +247,8 @@ export function App() {
     change(next,null,true,axis?`Varia ${AXES.find(a=>a.id===axis).label}`:'Varia tutti');
     setFocusPick(false); engine.current?.setFocusMode(false);
     closeShader();
-    notify(axis?`${AXES.find(item=>item.id===axis).label} variato`:`${activeCount} assi variati${!gpu?' · anteprima statica':''}`);
+    const names={mat:'Materiale variato',env:'Scena variata',light:'Luci variate',cam:'Camera variata',fx:'Effetti variati'};
+    notify(`${axis?names[axis]:`${activeCount} assi variati`}${!gpu?' · setup aggiornato, anteprima statica':''}`,false,true);
   };
   const materialEligible=canGenerateMaterial(state,materials);
   const activeCount=Object.entries(generationAmounts(state,null,100)).filter(([id,amount])=>amount>0&&(id!=='mat'||materialEligible)).length;
@@ -236,6 +263,7 @@ export function App() {
     notify(`${AXES.find(axis=>axis.id===id).label} ripristinato`);
   };
   const startGesture = () => history.current.endGesture();
+  const gestures={begin:()=>{gestureBefore.current=stateRef.current;history.current.beginGesture();},end:()=>{history.current.endGesture(stateRef.current);setHistoryView(history.current.view);gestureBefore.current=null;},cancel:()=>{if(!gestureBefore.current)return;history.current.cancelGesture();stateRef.current=gestureBefore.current;setState(gestureBefore.current);setHistoryView(history.current.view);gestureBefore.current=null;}};
   const knob = (category, key, label, props = {}) => <Knob label={label} value={state[category][key]} onChange={v => field(category, key, v)} disabled={!canUse} onStart={startGesture} {...props} />;
 
   const presets = category => <Presets category={category} selected={category === 'product' ? mat.finish : state[category].preset} onChoose={id => choosePreset(category, id)} disabled={!canUse} />;
@@ -244,8 +272,11 @@ export function App() {
     // The console tracks the pointer; reframe once on release, not on every move.
     if(!layout.resizing)engine.current?.setWorkspace(layout.insets);
   }, [engineReady,layout.resizing,layout.insets.right,layout.insets.bottom]);
+  const exportPreview=showFrame&&technical==='export'&&!presentation&&gpu;
+  useEffect(()=>{engine.current?.setExportPreview(exportPreview?{aspect:exportSettings.aspect}:null);},[engineReady,exportPreview,exportSettings.aspect]);
 
-  contextRef.current.orbit=()=>{if(!presentation)dispatchMenu({type:'open',id:'camera'});};
+  // Orbit is inspection of the current look. Only explicit camera tools open CAM.
+  contextRef.current.orbit=()=>{};
   contextRef.current.select=()=>{if(!presentation)dispatchMenu({type:'open',id:'product'});};
   contextRef.current.empty=()=>setHoverTarget(null);
   contextRef.current.hover = target => {
@@ -265,25 +296,32 @@ export function App() {
   };
 
   const axisNavigation={active:activeCategory,opened:panelOpen&&!presentation,onChange:selectCategory,axes:state.axes,onDelta:(id,delta)=>setAxis(id,{delta}),onGenerate:randomize,onLock:id=>setAxis(id,{locked:!stateRef.current.axes[id].locked}),onReset:restoreAxis,materialEligible,materialResettable:!!selectedMaterial?.original,controlsDisabled:!canUse,disabled:recording!==null};
+  const currentAxis=AXES.find(a=>a.tab===activeCategory),contextTitle=technical?{model:'Modello',project:'Progetto',export:'Esporta'}[technical]:{product:'Materiali',scene:'Scena',lighting:'Luci',camera:'Camera',motion:'Effetti'}[activeCategory];
+  const jumpTo=title=>{const area=document.getElementById('property-content'),section=[...(area?.querySelectorAll('.control-block')||[])].find(el=>el.getAttribute('aria-label')===title);section?.scrollIntoView({block:'start',behavior:'instant'});};
+  useEffect(()=>{if(pendingSection&&!presentation){jumpTo(pendingSection);setPendingSection(null);}},[pendingSection,technical,presentation]);
+  const showSurfaces=()=>{openTechnical('model');setPendingSection('Superfici');};
+  const pngSize=gpu?{width:canvas.current?.width||stats?.width,height:canvas.current?.height||stats?.height}:null;
+  const frame=exportFrame(layout.width,layout.height,layout.insets,exportSettings);
 
-  return <main ref={studioRoot} className={`studio axes-workspace open-console editorial-console ${layout.bottom?'bottom-console':'side-console'} ${!presentation&&!layout.bottom&&layout.width-layout.insets.right<480?'compact-player':''} ${layout.resizing?'is-resizing':''} ${isLightBackdrop(state.scene.background)&&!state.render.alpha?'console-on-light':''} ${presentation ? 'is-presenting' : ''} ${status === 'fallback' ? 'is-fallback' : ''} ${state.render.alpha && gpu ? 'is-alpha' : ''} ${recording!==null?'is-recording':''}`}
-    style={{'--workspace-width':layout.bottom?'100%':`${layout.insets.right}px`,'--console-size':`${layout.insets.bottom}px`,'--player-width':presentation||layout.bottom?'100%':`calc(100% - ${layout.insets.right}px)`,'--player-height':presentation||!layout.bottom?'100%':`calc(100% - ${layout.insets.bottom}px)`}}
+  return <ControlGestureContext.Provider value={gestures}><main ref={studioRoot} className={`studio axes-workspace open-console editorial-console ${layout.bottom?'bottom-console':'side-console'} ${!presentation&&!layout.bottom&&layout.width-layout.insets.right<480?'compact-player':''} ${layout.resizing?'is-resizing':''} ${isLightBackdrop(state.scene.background)&&!state.render.alpha?'console-on-light':''} ${presentation ? 'is-presenting' : ''} ${status === 'fallback' ? 'is-fallback' : ''} ${state.render.alpha && gpu ? 'is-alpha' : ''} ${recording!==null?'is-recording':''}`}
+    style={{'--panel-gutter':`${WORKSPACE_TOKENS.gutter}px`,'--axis-target':`${WORKSPACE_TOKENS.axisTarget}px`,'--secondary-target':`${WORKSPACE_TOKENS.secondaryTarget}px`,'--workspace-min':`${WORKSPACE_TOKENS.sideMin}px`,'--workspace-width':layout.bottom?'100%':`${layout.insets.right}px`,'--console-size':`${layout.insets.bottom}px`,'--player-width':presentation||layout.bottom?'100%':`calc(100% - ${layout.insets.right}px)`,'--player-height':presentation||!layout.bottom?'100%':`calc(100% - ${layout.insets.bottom}px)`}}
     onDragOver={e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); if(!recordingRef.current)setDraggingFile(true); } }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDraggingFile(false); }} onDrop={e => { e.preventDefault(); setDraggingFile(false); if(recordingRef.current)return;const file = e.dataTransfer.files[0]; if (/\.(pvis|json)$/i.test(file?.name || '')) openProject(file); else importModel(file); }}>
     <div className="viewport">{status === 'fallback' && <picture className="fallback-render"><source media="(max-width: 899px)" srcSet="/assets/studio-fallback-mobile.webp" /><img src="/assets/studio-fallback.webp" decoding="async" alt="Riferimento statico del prodotto; non rappresenta la scena 3D corrente" /></picture>}<canvas ref={canvas} aria-label="Prodotto 3D. Trascina per orbitare, pizzica per avvicinare, tocca una superficie per selezionarla." /></div><ProgressiveBlur className="ui-scrim"/>
     <header className="topbar">
       <img className="memento-logo" src="/assets/memento-icon.svg" alt="Memento" width="32" height="38"/>
     </header>
     <nav className="technical-rail top-tools" aria-label="Strumenti ProductVis" aria-hidden={recording!==null} inert={recording!==null?true:undefined}>
+      {[["model","Modello e ispezione",<WorkspaceIcon name="model" size={23}/>],["project","Rendering e progetto",<IconSettings size={23}/>],["export","Playblast ed export",<IconCapture size={23}/>]].map(([id,label,icon])=><Tool key={id} id={`menu-trigger-${id}`} label={label} data-tech={id} aria-controls={technical===id&&!presentation?`controls-${id}`:undefined} aria-expanded={technical===id&&!presentation} className={`${technical===id&&!presentation?'active':''} ${id==='project'&&dirty?'is-dirty':''}`} disabled={recording!==null} onClick={()=>openTechnical(id)}>{icon}{id==='project'&&dirty&&<span className="dirty-dot" aria-label="Progetto modificato"/>}</Tool>)}
       <ViewTools fullscreen={fullscreen} onFullscreen={toggleFullscreen} disabled={recording!==null}/>
-      <div className="global-generation"><GenerateDial delta={state.randomDelta} onDelta={value=>change(s=>({...s,randomDelta:value}),null,false)} onGenerate={()=>randomize()} disabled={!canUse} locked={recording!==null} activeCount={activeCount}/></div>
-      {[["model","Modello e ispezione",<WorkspaceIcon name="model" size={23}/>],["project","Rendering e progetto",<IconSettings size={23}/>],["export","Playblast ed export",<IconCapture size={23}/>]].map(([id,label,icon])=><Tool key={id} id={`menu-trigger-${id}`} label={label} data-tech={id} aria-controls={technical===id&&!presentation?`controls-${id}`:undefined} aria-expanded={technical===id&&!presentation} className={technical===id&&!presentation?'active':''} disabled={recording!==null} onClick={()=>openTechnical(id)}>{icon}</Tool>)}
     </nav>
-    {status === 'fallback' && <div className="gpu-note" role="status"><IconInfoCircle size={15} /><span>Riferimento statico · WebGL non disponibile</span><Tool label="Riprova il 3D" onClick={() => window.location.reload()}><IconRefresh size={15} /></Tool></div>}
+    {status === 'fallback' && <div className="gpu-note" role="status"><IconInfoCircle size={17} /><span><strong>Anteprima statica</strong><small>WebGL non disponibile. Il setup cambia, l’immagine no.</small></span><Tool label="Riprova il 3D" onClick={()=>guard('Ricaricare il 3D',()=>{allowUnload.current=true;window.location.reload();})}><IconRefresh size={17} /></Tool></div>}
+    {exportPreview&&<div className="export-frame-guide" style={{left:frame.x,top:frame.y,width:frame.width,height:frame.height}} aria-hidden="true"><span>{exportSettings.aspect} · guida video</span></div>}
     {focusPick && <div className="focus-hint"><IconFocus2 size={17} />Tocca il punto di fuoco<Tool label="Annulla fuoco" onClick={() => { setFocusPick(false); engine.current?.setFocusMode(false); }}><IconX size={17} /></Tool></div>}
     {loadingModel && <div className="loading-state" role="status"><IconCube size={26} /><span>Carico il prodotto</span><progress max="100" value={progress} /><small>{progress}%</small></div>}
     {error && <div className="error-state" role="alert"><IconAlertCircle size={24} /><p>{error}</p><button onClick={loadDemo}>Ricarica demo</button><button onClick={() => setError('')}>Chiudi</button></div>}
 
     <aside className="control-column" id="productvis-controls" aria-label="Controlli ProductVis" aria-hidden={recording!==null} inert={recording!==null?true:undefined}>
+      <div className="console-header">
       <div className="console-seam">
         <WorkspaceResizeHandle layout={layout} edge="seam-leading" disabled={presentation||recording!==null}/>
         <button ref={visibilityButton} type="button" className="property-toggle" aria-label={presentation?'Apri proprietà':'Chiudi proprietà · modalità semplificata'} aria-controls="property-content" aria-expanded={!presentation} onClick={()=>setPresentation(v=>!v)} disabled={recording!==null}>
@@ -291,26 +329,30 @@ export function App() {
         </button>
         <WorkspaceResizeHandle layout={layout} edge="seam-trailing" disabled={presentation||recording!==null}/>
       </div>
+      <div className="global-generation"><GenerateDial delta={state.randomDelta} onDelta={value=>change(s=>({...s,randomDelta:value}),null,false)} onGenerate={()=>randomize()} disabled={!canUse} locked={recording!==null} activeCount={activeCount}/></div>
+      </div>
       <div id="property-content" className="property-content" aria-hidden={presentation} inert={presentation?true:undefined}>
+      <WorkspaceContext key={`context-${technical||activeCategory}`} title={contextTitle} surface={!technical&&activeCategory==='product'?selectedMaterial?.label:null} axis={!technical?currentAxis:null} value={state.axes[currentAxis.id].delta} locked={state.axes[currentAxis.id].locked} onDelta={delta=>setAxis(currentAxis.id,{delta})} disabled={!canUse}/>
       {panelOpen&&<div className="creative-pages">
       <CategoryPager active={activeCategory} scrollPositions={workspaceScroll.current}>
         <Category id="product" title="Materiali" icon={IconCube}>
-          <div className="surface-context"><span><strong>{selectedMaterial?.label||'Caricamento…'}</strong></span><button type="button" className="text-action" onClick={()=>openTechnical('model')}>Modello ↗</button></div>
+          <div className="surface-context"><span>Materiale condiviso</span><button type="button" className="text-action" onClick={showSurfaces}>Superfici ↗</button></div>
           <MeshEditor material={mat} metadata={selectedMaterial} onChange={patch=>patchMaterial(state.selectedMaterial,patch)} onPreset={id=>choosePreset('product',id)} onStart={startGesture} disabled={!canUse}/>
         </Category>
-        <Category id="scene" title="Environment" icon={IconMountain}><SceneControls state={state} field={field} knob={knob} presets={presets} disabled={!canUse} onChooseStage={id=>choosePreset('scene',id)}/></Category>
-        <Category id="lighting" title="Lighting" icon={IconSun}><LightingControls state={state} field={field} knob={knob} presets={presets} disabled={!canUse}/></Category>
+        <Category id="scene" title="Scena" icon={IconMountain}><SceneControls state={state} field={field} knob={knob} presets={presets} disabled={!canUse} onChooseStage={id=>choosePreset('scene',id)}/></Category>
+        <Category id="lighting" title="Luci" icon={IconSun}><LightingControls state={state} field={field} knob={knob} presets={presets} disabled={!canUse}/></Category>
         <Category id="camera" title="Camera" icon={IconCamera}>
           <CameraWorkspace state={state} field={field} knob={knob} presets={presets} disabled={!canUse} focusPick={focusPick} onFocus={()=>{setFocusPick(v=>!v);engine.current?.setFocusMode(!focusPick);}} onRewind={()=>{field('motion','cursor',0);engine.current?.rewindMotion();}} onRender={()=>openTechnical('export')}/>
         </Category>
-        <Category id="motion" title="Visual FX" icon={IconSparkles}>
+        <Category id="motion" title="Effetti" icon={IconSparkles}>
+          {!gpu&&<p className="availability-note">FX richiede WebGL. I parametri del setup restano conservati.</p>}
           <ShaderControls state={state} change={change} field={field} knob={knob} disabled={!canUse||!gpu} cursor={effectsCursor} onStart={startGesture} onRestart={()=>{field('effects','phase',0);engine.current?.effects?.restart();engine.current?.invalidate();}}/>
         </Category>
       </CategoryPager>
       </div>}
-      {technical&&<TechnicalPanel key={technical} id={technical} title={{model:'Modello',project:'Progetto',export:'Export'}[technical]} scrollPositions={workspaceScroll.current}>
+      {technical&&<TechnicalPanel key={technical} id={technical} title={{model:'Modello',project:'Progetto',export:'Esporta'}[technical]} scrollPositions={workspaceScroll.current}>
         {technical==='model'&&<ControlDeck>
-          <ControlBlock title="Modello · spazio" wide><ModelControls name={modelName} transform={state.transform} disabled={!canUse} loading={loadingModel} onImport={()=>fileInput.current.click()} onDemo={loadDemo} onChange={transformModel} onAction={modelAction} onStart={startGesture}/></ControlBlock>
+          <ControlBlock title="Modello" className="model-primary" wide><ModelControls name={modelName} transform={state.transform} disabled={!canUse} loading={loadingModel} onImport={()=>fileInput.current.click()} onDemo={loadDemo} onChange={transformModel} onAction={modelAction} onStart={startGesture}/></ControlBlock>
           <ControlBlock title="Superfici" wide><MaterialPicker materials={materials} selectedId={state.selectedMaterial} disabled={!canUse} onSelect={id=>change(s=>({...s,selectedMaterial:id}),null,false)}/></ControlBlock>
           <ControlBlock title="Facce · trasparenza" wide><SurfacePolicyControls material={mat} metadata={selectedMaterial} onChange={patch=>patchMaterial(state.selectedMaterial,patch)} onStart={startGesture} disabled={!canUse}/></ControlBlock>
           <ControlBlock title="Coordinate UV" wide><UVControls material={mat} metadata={selectedMaterial} onChange={patch=>patchMaterial(state.selectedMaterial,patch)} disabled={!canUse}/></ControlBlock>
@@ -318,26 +360,27 @@ export function App() {
           <ControlBlock title="Animazioni GLB" wide><AnimationControls clips={animationClips} animation={state.animation} cursor={animationCursor} disabled={!canUse} onChange={updateAnimation} onSeek={seekAnimation} knob={knob}/></ControlBlock>
         </ControlDeck>}
         {technical==='export'&&<ControlDeck>
-          <ControlBlock title="Frame PNG" wide><Toggle label="Sfondo alpha" icon={IconCircleHalf2} checked={state.render.alpha} onChange={value=>field('render','alpha',value)} disabled={!gpu||!canUse}/><div className="project-actions"><button onClick={exportImage} disabled={!gpu||!canUse}><IconPhotoDown size={19}/>Esporta frame PNG</button></div></ControlBlock>
-          <ControlBlock title="Playblast" wide><PlayblastControls settings={exportSettings} setSettings={setExportSettings} disabled={!gpu||!canUse||state.render.alpha} supported={capabilities.recording} onExport={exportClip}/>{state.render.alpha&&<span className="interaction-hint">Video: disattiva Alpha. PNG conserva la trasparenza.</span>}</ControlBlock>
+          <ControlBlock title="Frame PNG" wide><Toggle label="Sfondo alpha" icon={IconCircleHalf2} checked={state.render.alpha} onChange={value=>field('render','alpha',value)} disabled={!gpu||!canUse}/><output className="export-summary">{pngSize?`${pngSize.width} × ${pngSize.height} px · ${state.render.alpha?'Trasparente':'Sfondo incluso'}`:'PNG disponibile con WebGL'}</output><div className="project-actions"><button onClick={exportImage} disabled={!gpu||!canUse}><IconPhotoDown size={19}/>Esporta frame PNG</button></div>{!gpu&&<span className="availability-note">Il riferimento statico non è esportabile.</span>}</ControlBlock>
+          <ControlBlock title="Playblast" wide><Toggle label="Guide formato nel player" checked={showFrame} onChange={setShowFrame} disabled={!gpu||!canUse}/><PlayblastControls settings={exportSettings} setSettings={setExportSettings} disabled={!gpu||!canUse||state.render.alpha} supported={capabilities.recording} reason={!gpu?'Il video richiede WebGL':state.render.alpha?'Disattiva Alpha per registrare un video':!canUse?'Attendi il modello':null} onExport={exportClip}/>{state.render.alpha&&<button className="text-action" onClick={()=>field('render','alpha',false)}>Disattiva Alpha</button>}</ControlBlock>
         </ControlDeck>}
         {technical==='project'&&<ControlDeck>
           <ControlBlock title="Rendering" wide><RenderControls state={state} change={change} capabilities={capabilities} stats={stats} onStart={startGesture}/></ControlBlock>
-          <ControlBlock title="Progetto ProductVis" wide><div className="project-files"><input className="project-name" aria-label="Nome progetto" value={state.name} maxLength={80} onChange={e=>change(s=>({...s,name:e.target.value}),'name')}/><div className="project-actions"><button onClick={saveProject} disabled={!canUse}><IconDeviceFloppy size={19}/>Salva .pvis</button><button onClick={()=>projectInput.current.click()}><IconFolderOpen size={19}/>Apri .pvis</button></div></div></ControlBlock>
-          <ControlBlock title="Workspace" wide><Toggle label="Monitor rendering" icon={IconActivity} checked={state.render.stats} onChange={value=>field('render','stats',value)}/><button className="credits-link" onClick={()=>setShowCredits(true)}><IconInfoCircle size={14}/>Crediti demo</button></ControlBlock>
+          <ControlBlock title="Progetto ProductVis" wide><div className="project-files"><input className="project-name" aria-label="Nome progetto" value={state.name} maxLength={80} onChange={e=>change(s=>({...s,name:e.target.value}),'name')}/><span className={`project-state ${dirty?'modified':''}`} role="status">{dirty?'Modifiche da conservare':copyCreated?'Nessuna modifica dalla copia':'Nessuna modifica'}</span><div className="project-actions"><button onClick={saveProject} disabled={!canUse||savingCopy}><IconDeviceFloppy size={19}/>{savingCopy?'Preparo…':'Salva copia'}</button><button onClick={()=>projectInput.current.click()} disabled={loadingModel}><IconFolderOpen size={19}/>Apri .pvis</button></div><span className="interaction-hint">Copia .pvis con modello e setup · controlla i download.</span></div></ControlBlock>
+          <ControlBlock title="Workspace" wide><WorkspaceSizeControls layout={layout} disabled={recording!==null}/><Knob label="Delta globale" min={0} max={100} step={1} format={v=>String(v)} value={state.randomDelta} onChange={value=>change(s=>({...s,randomDelta:value}),null,false)}/><Toggle label="Monitor rendering" icon={IconActivity} checked={state.render.stats} onChange={value=>field('render','stats',value)}/><button className="credits-link" onClick={()=>setShowCredits(true)}><IconInfoCircle size={14}/>Crediti demo</button></ControlBlock>
         </ControlDeck>}
       </TechnicalPanel>}
       </div>
-      <HistoryRail {...historyView} onUndo={undo} onRedo={redo} onSeek={index=>travelHistory('seek',index)} disabled={recording!==null}/>
+      <HistoryRail {...historyView} onUndo={undo} onRedo={redo} onSeek={(index,options)=>travelHistory('seek',index,options)} disabled={recording!==null}/>
       <CategoryNavigation {...axisNavigation}/>
     </aside>
     {!layout.bottom&&layout.width>=1024&&!presentation&&<AxisDock {...axisNavigation}/>}
     {recording!==null&&<div className="recording-status" role="status"><span>Playblast {recording}%</span><button onClick={()=>recordAbort.current?.abort()}>Annulla</button></div>}
     {!presentation && gpu && hoverTarget && contextMaterial && <div className="mesh-hover" ref={hoverMarker} style={{transform:`translate3d(${hoverTarget.x}px,${hoverTarget.y}px,0)`}} aria-hidden="true"><IconFocus2 size={22}/><span>{contextMaterial.label}</span></div>}
     {state.render.stats && !presentation && gpu && <output className="performance-hud" aria-label="Monitor rendering"><b>{stats?.idle?'Idle':stats?.fps?`${stats.fps} fps`:'— fps'}</b><span>{stats?.frameMs?`${stats.frameMs.toFixed(1)} ms · `:''}{stats?.width} × {stats?.height}</span><span>MSAA {stats?.samples?`${stats.samples}×`:'Off'} · {stats?.triangles?`${Math.round(stats.triangles/1000)}k tris`:''}</span></output>}
-    {toast && <div className={`toast ${toast.bad ? 'bad' : ''}`} role="status">{toast.bad ? <IconAlertCircle size={18}/> : <IconCheck size={18}/>}<span>{toast.message}</span></div>}
+    {toast && <div className={`toast ${toast.bad ? 'bad' : ''}`} role="status">{toast.bad ? <IconAlertCircle size={18}/> : <IconCheck size={18}/>}<span>{toast.message}</span>{toast.recover&&<button onClick={undo}>Annulla</button>}</div>}
     {draggingFile && <div className="file-drop"><IconUpload size={36}/><span>Rilascia GLB o progetto</span></div>}
-    {showCredits && <div className="credits-backdrop" onClick={()=>setShowCredits(false)}><section className="credits" role="dialog" aria-modal="true" aria-label="Crediti modello" onClick={e=>e.stopPropagation()}><Tool label="Chiudi crediti" onClick={()=>setShowCredits(false)}><IconX size={20}/></Tool><h2>Honda NSX · Demo</h2><p>2015 Rocket Bunny Racing Honda NSX</p><a href="https://sketchfab.com/ddiaz-design" target="_blank" rel="noreferrer">Ddiaz Design</a><a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer">CC BY-NC-SA 4.0</a><small>{modelName} · {materials.length} superfici</small></section></div>}
+    {showCredits && <Modal label="Crediti modello" onClose={()=>setShowCredits(false)}><Tool label="Chiudi crediti" onClick={()=>setShowCredits(false)}><IconX size={20}/></Tool><h2>Honda NSX · Demo</h2><p>2015 Rocket Bunny Racing Honda NSX</p><a href="https://sketchfab.com/ddiaz-design" target="_blank" rel="noreferrer">Ddiaz Design</a><a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer">CC BY-NC-SA 4.0</a><small>{modelName} · {materials.length} superfici</small></Modal>}
+    {pendingAction&&<Modal label="Conserva le modifiche" onClose={()=>{if(!savingCopy)setPendingAction(null);}}><h2>Conserva il tuo setup</h2><p>{pendingAction.label} sostituirà il lavoro corrente. Puoi prima scaricare una copia .pvis.</p><div className="dialog-actions"><button data-initial-focus disabled={savingCopy} onClick={()=>setPendingAction(null)}>Annulla</button><button disabled={savingCopy} onClick={()=>{const action=pendingAction;setPendingAction(null);action.run();}}>Continua senza copia</button><button className="primary" disabled={savingCopy} onClick={async()=>{const action=pendingAction;if(await saveProject()){setPendingAction(null);action.run();}}}>{savingCopy?'Preparo la copia…':'Salva copia e continua'}</button></div></Modal>}
     <input ref={fileInput} type="file" accept=".glb,model/gltf-binary" hidden onChange={e=>importModel(e.target.files[0])}/><input ref={projectInput} type="file" accept=".pvis,.json,application/json" hidden onChange={e=>openProject(e.target.files[0])}/>
-  </main>;
+  </main></ControlGestureContext.Provider>;
 }

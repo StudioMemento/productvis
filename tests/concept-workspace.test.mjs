@@ -8,8 +8,8 @@ import { randomizePresentation } from '../src/presentation.js';
 import { ModelAnimation } from '../src/modelAnimation.js';
 import { INITIAL_MENU, workspaceMenu, restoreWorkspaceMenu, persistWorkspaceMenu } from '../src/workspaceMenu.js';
 
-test('six curated stages preserve camera and authored materials',()=>{
-  assert.deepEqual(STAGES.map(s=>s.id),['void','cubes','studio','rain','ring','velocity-lines']);
+test('curated stages preserve camera and authored materials',()=>{
+  assert.deepEqual(STAGES.map(s=>s.id),['amber-halo','water','cloud','aurora','dust','void','cubes','studio','rain','ring','velocity-lines']);
   for(const stage of STAGES){
     const state=applyPreset(clone(DEFAULT_STATE),'scene',stage.id);
     assert.equal(state.scene.preset,stage.id);assert.deepEqual(state.lighting,DEFAULT_STATE.lighting);
@@ -23,12 +23,13 @@ test('every concept stays within a small draw/triangle budget at maximum density
   for(const spec of CONCEPT_STAGES)for(const coarse of [false,true]){
     const state={...DEFAULT_STATE.scene,...spec.theme,preset:spec.id,density:1};
     const stage=createConceptStage(state,coarse);let draws=0,triangles=0;
-    stage.group.traverse(o=>{if(!o.geometry)return;draws++;if(o.isMesh)triangles+=(o.geometry.index?.count||o.geometry.attributes.position.count)/3*(o.isInstancedMesh?o.count:1);assert.ok(!o.material.map);assert.ok(!o.isLight);});
+    stage.group.traverse(o=>{if(!o.geometry)return;draws++;if(o.isMesh)triangles+=(o.geometry.index?.count||o.geometry.attributes.position.count)/3*(o.isInstancedMesh?o.count:1);assert.ok(!o.material.map||o.material.map.isDataTexture);assert.ok(!o.isLight);});
     assert.ok(draws<=12,`${spec.id}: ${draws} draw calls`);assert.ok(triangles<6000,`${spec.id}: ${triangles} triangles`);
     assert.equal(stage.update({...state,speed:0},50),false);
     if(spec.effect==='rain')assert.equal(stage.update({...state,speed:1,weather:0},50),false);
     if(!spec.effect)assert.equal(stage.update({...state,speed:1},50),false);
-    if(stage.reflectionSpan)assert.ok(stage.reflectionSpan/2*Math.SQRT2<4.3,'island reflector stays inside the platform');
+    if(stage.reflectionSpan&&!stage.usesCachedReflection)assert.ok(stage.reflectionSpan/2*Math.SQRT2<4.3,'island reflector stays inside the platform');
+    if(stage.isCloud)assert.equal(stage.reflectionSpan,stage.reflectionRadius*2,'cloud reflector has a circular platform mask');
     dispose(stage);
   }
 });
@@ -39,7 +40,7 @@ test('solid stage modules keep the central product volume clear at all supported
   for(const spec of CONCEPT_STAGES)for(const scale of [.55,1.5]){
     const stage=createConceptStage({...DEFAULT_STATE.scene,...spec.theme,preset:spec.id,density:1,scale,height:2,spread:.6});
     stage.group.updateMatrixWorld(true);
-    stage.group.traverse(o=>{if(!o.isMesh||o.material.transparent)return;o.geometry.computeBoundingBox();
+    stage.group.traverse(o=>{if(!o.isMesh||o.material.transparent||o.userData.isBackdrop)return;o.geometry.computeBoundingBox();
       for(let i=0;i<(o.isInstancedMesh?o.count:1);i++){
         if(o.isInstancedMesh){o.getMatrixAt(i,transform);transform.premultiply(o.matrixWorld);}else transform.copy(o.matrixWorld);
         bounds.copy(o.geometry.boundingBox).applyMatrix4(transform);
@@ -49,7 +50,7 @@ test('solid stage modules keep the central product volume clear at all supported
   }
 });
 
-test('Sparkle includes all six curated stages, preserves native animation, and pauses effects for reduced motion',()=>{
+test('Sparkle includes all curated stages, preserves native animation, and pauses effects for reduced motion',()=>{
   let seed=37;const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)|0;return(seed>>>0)/4294967296;};
   let state=clone(DEFAULT_STATE);state.animation={clip:2,playing:true,cursor:.4,loop:false,speed:.8};
   const seen=new Set();for(let i=0;i<700;i++){const before=state;state=randomizePresentation(state,[],{random,reducedMotion:true});seen.add(state.scene.preset);assert.notEqual(state.scene.preset,before.scene.preset);assert.deepEqual(state.animation,before.animation);assert.equal(state.scene.speed,0);assert.equal(state.motion.playing,false);}
