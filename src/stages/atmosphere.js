@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {addConcreteVariation} from './concreteVariation.js';
 import {createConcreteMaps} from './amberHaloMaterial.js';
 import {createHorizon,addHorizonToMaterial} from './horizon.js';
 import {createNatureProbe} from './naturePlatform.js';
@@ -74,6 +75,7 @@ export function createAtmosphereStage(s,coarse=false,sharedHorizon){
   const horizon=sharedHorizon||createHorizon(s);if(!sharedHorizon)group.add(horizon.sky);
   const maps=createConcreteMaps(coarse);
   const floorMaterial=addHorizonToMaterial(new THREE.MeshStandardMaterial({...maps,color:s.groundColor,roughness:s.floorRoughness,metalness:.14,normalScale:new THREE.Vector2(.12,.12),dithering:true}),horizon);
+  addConcreteVariation(floorMaterial);
   const floor=new THREE.Mesh(new THREE.PlaneGeometry(160,160),floorMaterial);floor.rotation.x=-Math.PI/2;floor.position.y=-.012;floor.receiveShadow=true;group.add(floor);
   const uniforms={flow:{value:0},height:{value:s.height},spread:{value:s.spread},seed:{value:0},amount:{value:s.weather},detail:{value:s.density},tint:{value:new THREE.Color(s.ringColor)},pixelScale:{value:800}};
   const material=new THREE.ShaderMaterial({uniforms,vertexShader:aurora?AURORA_VERTEX:DUST_VERTEX,fragmentShader:aurora?AURORA_FRAGMENT:DUST_FRAGMENT,transparent:true,depthWrite:false,side:THREE.DoubleSide});

@@ -311,7 +311,7 @@ export class StudioEngine {
       applyModelTransform(this.placement, config.transform);
       this.contactShadow?.invalidate();
     }
-    const sceneKey = ['amber-halo','water','cloud','aurora','dust'].includes(config.scene.preset) ? config.scene.preset : JSON.stringify([config.scene.preset, config.scene.composition, config.scene.scale, config.scene.seed,config.scene.density,config.scene.height,config.scene.spread]);
+    const sceneKey = ['amber-halo','water','cloud','aurora','dust','rain'].includes(config.scene.preset) ? config.scene.preset : JSON.stringify([config.scene.preset, config.scene.composition, config.scene.scale, config.scene.seed,config.scene.density,config.scene.height,config.scene.spread]);
     if (sceneKey !== this.sceneKey) { this.buildStage(config.scene); this.sceneKey = sceneKey; }
     this.stageEnvironment?.setStage(this.customStage, config.scene);
     this.haloReflectionDirty = true;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {addConcreteVariation} from './concreteVariation.js';
 
 const dataCache = new Map();
 const smooth = t => t * t * (3 - 2 * t);
@@ -82,5 +83,5 @@ export function createHaloFloor(maps, uniforms) {
       totalEmissiveRadiance += haloColor * spill * haloPower * (.8 + .2 * pool);`);
   };
   material.customProgramCacheKey = () => 'amber-halo-concrete-v1';
-  return material;
+  return addConcreteVariation(material);
 }

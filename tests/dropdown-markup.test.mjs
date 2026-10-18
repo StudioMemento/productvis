@@ -195,8 +195,9 @@ test('history keeps the active slot central and never represents an empty future
   const end=html(HistoryRail,{cursor:5,labels:['A','B','C','D','E']});
   assert.equal(count(end,/class="history-pivot"/g),1);
   assert.ok(end.includes('data-at-present="true"'));assert.ok(end.includes('Presente'));
-  assert.deepEqual(historyDrag(5,100,5),{cursor:5,offset:0});
-  assert.deepEqual(historyDrag(0,-100,5),{cursor:0,offset:0});
+  assert.ok(!end.includes('history-caption'));assert.ok(end.includes('aria-description="Trascina a destra'));
+  assert.deepEqual(historyDrag(5,-100,5),{cursor:5,offset:0});
+  assert.deepEqual(historyDrag(0,100,5),{cursor:0,offset:0});
 });
 
 const historyGesture=(cursor=5,extra={})=>{
@@ -207,18 +208,18 @@ const historyGesture=(cursor=5,extra={})=>{
 };
 test('history drags continuously and restores only the selected release, bounded at the present',()=>{
   const h=historyGesture();h.p.onPointerDown(h.event);
-  for(const clientX of [240,152,176,260,300])h.p.onPointerMove({...h.event,clientX});
+  for(const clientX of [160,248,224,140,100])h.p.onPointerMove({...h.event,clientX});
   assert.deepEqual(h.calls,[],'no expensive scene restores while moving');
-  h.p.onPointerUp({...h.event,clientX:300});assert.deepEqual(h.calls,[],'present remains a no-op');
-  const undo=historyGesture();undo.p.onPointerDown(undo.event);undo.p.onPointerMove({...undo.event,clientX:152});
-  assert.deepEqual(undo.calls,[]);undo.p.onPointerUp({...undo.event,clientX:152});assert.deepEqual(undo.calls,[3]);
-  const redo=historyGesture(3);redo.p.onPointerDown(redo.event);redo.p.onPointerMove({...redo.event,clientX:248});redo.p.onPointerUp({...redo.event,clientX:248});assert.deepEqual(redo.calls,[5]);
+  h.p.onPointerUp({...h.event,clientX:100});assert.deepEqual(h.calls,[],'present remains a no-op');
+  const undo=historyGesture();undo.p.onPointerDown(undo.event);undo.p.onPointerMove({...undo.event,clientX:248});
+  assert.deepEqual(undo.calls,[]);undo.p.onPointerUp({...undo.event,clientX:248});assert.deepEqual(undo.calls,[3]);
+  const redo=historyGesture(3);redo.p.onPointerDown(redo.event);redo.p.onPointerMove({...redo.event,clientX:152});redo.p.onPointerUp({...redo.event,clientX:152});assert.deepEqual(redo.calls,[5]);
 });
 test('history taps existing slots; cancellation never restores an intermediate scene',()=>{
   const empty=historyGesture();const tap={...empty.event,clientX:248};empty.p.onPointerDown(tap);empty.p.onPointerUp(tap);assert.deepEqual(empty.calls,[]);
   const past=historyGesture();const slot={...past.event,clientX:152};past.p.onPointerDown(slot);past.p.onPointerUp(slot);assert.deepEqual(past.calls,[3]);
   for(const method of ['onPointerCancel','onLostPointerCapture','onKeyDown']){
-    const h=historyGesture();h.p.onPointerDown(h.event);h.p.onPointerMove({...h.event,clientX:128});
+    const h=historyGesture();h.p.onPointerDown(h.event);h.p.onPointerMove({...h.event,clientX:272});
     h.p[method]({...h.event,key:'Escape'});assert.deepEqual(h.calls,[]);
     h.p.onPointerUp(h.event);assert.deepEqual(h.calls,[]);
   }

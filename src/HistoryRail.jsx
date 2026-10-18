@@ -40,11 +40,9 @@ export function HistoryRail({cursor,labels,onUndo,onRedo,onSeek,disabled}){
     setPosition(index);
     if(index!==cursor)onSeek(index);
   };
-  const caption=selected===total?'Presente':selected?labels[selected-1]:'Inizio';
   return <div className="history-rail" role="group" aria-label="Cronologia modifiche">
-    <span className="history-caption">{caption}<small> · {selected}/{total}</small></span>
     <Tool label="Annulla · Ctrl Z" disabled={disabled||cursor===0} onClick={onUndo}><IconChevronLeft size={16}/></Tool>
-    <div ref={track} className={`history-track ${dragging?'is-dragging':''}`} role="slider" tabIndex={unavailable?-1:0} aria-label="Posizione cronologia" aria-valuemin={0} aria-valuemax={total} aria-valuenow={selected} aria-valuetext={`${selected} di ${total} · ${selected?labels[selected-1]:'Inizio'}${selected===total?' · Presente':''}`} aria-orientation="horizontal" aria-disabled={!!unavailable} data-at-present={selected===total} style={{'--history-offset':`${-position*HISTORY_STEP}px`,'--history-step':`${HISTORY_STEP}px`}} title="Trascina o scorri · sinistra annulla, destra ripete · rilascia per applicare"
+    <div ref={track} className={`history-track ${dragging?'is-dragging':''}`} role="slider" tabIndex={unavailable?-1:0} aria-label="Posizione cronologia" aria-description="Trascina a destra per tornare indietro, a sinistra per avanzare. Rilascia per applicare. Frecce sinistra/destra: precedente/successivo." aria-valuemin={0} aria-valuemax={total} aria-valuenow={selected} aria-valuetext={`${selected} di ${total} · ${selected?labels[selected-1]:'Inizio'}${selected===total?' · Presente':''}`} aria-orientation="horizontal" aria-disabled={!!unavailable} data-at-present={selected===total} style={{'--history-offset':`${-position*HISTORY_STEP}px`,'--history-step':`${HISTORY_STEP}px`}}
       onPointerDown={event=>{
         if(unavailable||event.button!==0||gesture.current)return;
         clearTimeout(timer.current);wheel.current=null;event.preventDefault();event.currentTarget.focus({preventScroll:true});event.currentTarget.setPointerCapture(event.pointerId);

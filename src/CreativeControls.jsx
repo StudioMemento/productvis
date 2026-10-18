@@ -43,9 +43,9 @@ export function SceneControls({state,field,knob,disabled,onChooseStage}) {
         {knob('scene','spread','Estensione',{min:.6,max:1.8,step:.05,unit:'×',format:v=>`${v.toFixed(2)}×`})}
         {knob('scene','speed','Flusso',{max:1.2,step:.05,unit:'×',format:v=>`${v.toFixed(2)}×`})}
       </KnobGrid></ControlBlock>}
-      {(s.preset==='cubes'||modular)&&<ControlBlock title="Composizione">
+      {(s.preset==='cubes'||modular)&&<ControlBlock title={s.preset==='rain'?'Distribuzione pioggia':'Composizione'}>
         {s.preset==='cubes'&&<Choices label="Layout" value={s.composition} options={[0,1,2].map(n=>({value:n,ariaLabel:`Composizione ${n+1}`,label:<CompositionSymbol index={n}/>,disabled}))} onChange={v=>field('scene','composition',v)}/>}
-        <KnobGrid>{(s.preset==='cubes'||s.preset==='rain')&&knob('scene','scale','Volumi',{min:.55,max:1.5,step:.05,unit:'×',format:v=>`${v.toFixed(2)}×`})}{modular&&knob('scene','density','Densità')}{modular&&knob('scene','height','Altezza',{min:.3,max:2,step:.05,unit:'×',format:v=>`${v.toFixed(2)}×`})}{modular&&knob('scene','spread','Spazio',{min:.6,max:1.8,step:.05,unit:'×',format:v=>`${v.toFixed(2)}×`})}</KnobGrid>
+        <KnobGrid>{s.preset==='cubes'&&knob('scene','scale','Volumi',{min:.55,max:1.5,step:.05,unit:'×',format:v=>`${v.toFixed(2)}×`})}{modular&&knob('scene','density','Densità')}{modular&&knob('scene','height','Altezza',{min:.3,max:2,step:.05,unit:'×',format:v=>`${v.toFixed(2)}×`})}{modular&&knob('scene','spread','Spazio',{min:.6,max:1.8,step:.05,unit:'×',format:v=>`${v.toFixed(2)}×`})}</KnobGrid>
       </ControlBlock>}
       {(modular||s.preset==='cubes')&&<ControlBlock title={s.preset==='rain'?'Pioggia':s.preset==='cubes'?'Particelle':'Flusso'}><KnobGrid>{s.preset==='rain'&&knob('scene','weather','Quantità')}{modular&&knob('scene','speed','Velocità',{max:2,step:.05,unit:'×',format:v=>`${v.toFixed(2)}×`})}{s.preset==='cubes'&&knob('scene','particles','Quantità')}</KnobGrid></ControlBlock>}
     </div>

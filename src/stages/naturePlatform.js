@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {addConcreteVariation} from './concreteVariation.js';
 import { createConcreteMaps } from './amberHaloMaterial.js';
 
 export const ISLAND_RADIUS = 3.65;
@@ -10,6 +11,7 @@ export function createNaturePlatform(s, coarse=false) {
   for(const texture of Object.values(maps))texture.repeat.set(6,6);
   const material=new THREE.MeshStandardMaterial({...maps,color:s.groundColor,roughness:s.floorRoughness,
     metalness:.22,normalScale:new THREE.Vector2(.16,.16),dithering:true});
+  addConcreteVariation(material);
   const platform=new THREE.Mesh(new THREE.CylinderGeometry(ISLAND_RADIUS,ISLAND_RADIUS+.025,.3,96),material);
   platform.name='Product island';platform.position.y=ISLAND_TOP-.15;platform.receiveShadow=true;
   group.add(platform);

@@ -50,9 +50,30 @@ test('new atmosphere uniforms update in place, pause, record, restore and dispos
   }
 });
 test('tactile history has fractional motion and consistent bounded wheel units',()=>{
-  assert.equal(historyPosition(3,6,5),3.25);assert.equal(historyPosition(3,-12,5),2.5);
-  assert.equal(historyPosition(0,-200,5),0);assert.equal(historyPosition(5,200,5),5);
+  assert.equal(historyPosition(3,6,5),2.75);assert.equal(historyPosition(3,-12,5),3.5);
+  assert.equal(historyPosition(0,200,5),0);assert.equal(historyPosition(5,-200,5),5);
   assert.equal(historyWheelDistance({deltaX:0,deltaY:2,deltaMode:1}),16);
   assert.equal(historyWheelDistance({deltaX:-32,deltaY:1,deltaMode:0}),-16);
   assert.equal(historyWheelDistance({deltaX:0,deltaY:500,deltaMode:0}),48);
+});
+
+// Rain keeps working after removal of the skyline, including legacy parameters.
+test('rain has no solid volumes and updates its distribution without rebuilding',()=>{
+  for(const coarse of [false,true]){
+    const scene=applyPreset(clone(DEFAULT_STATE),'scene','rain').scene,stage=createEnvironmentStage(scene,coarse);
+    const objects=[];stage.group.traverse(o=>{if(o.geometry)objects.push(o);});
+    assert.equal(objects.length,1);assert.ok(objects[0].isLineSegments);
+    const drops=objects[0],geometry=drops.geometry,material=drops.material,maximum=coarse?180:360;
+    stage.update({...scene,density:1},1);assert.equal(geometry.drawRange.count,maximum*2);
+    stage.update({...scene,density:.5,height:1.8,spread:1.4,seed:171},1.1);
+    assert.equal(geometry.drawRange.count,maximum);assert.equal(material.uniforms.height.value,1.8);assert.equal(material.uniforms.spread.value,1.4);
+    assert.equal(drops.geometry,geometry);assert.equal(drops.material,material);
+    const phase=stage.phase;stage.update({...scene,speed:0},2);assert.equal(stage.phase,phase);
+    stage.update(scene,3,{reducedMotion:true});assert.equal(stage.phase,phase);
+    stage.update(scene,4,{recording:true});assert.equal(stage.phase,scene.speed*4);stage.restorePhase(phase,4);assert.equal(stage.phase,phase);
+    assert.equal(stage.update({...scene,density:0},5),false);assert.equal(drops.visible,false);
+    stage.update({...scene,density:1},6,{quality:'fluid'});assert.equal(geometry.drawRange.count,maximum);
+    let disposed=0;geometry.addEventListener('dispose',()=>disposed++);material.addEventListener('dispose',()=>disposed++);
+    StudioEngine.prototype.disposeObject.call({},stage.group);assert.equal(disposed,2);
+  }
 });
